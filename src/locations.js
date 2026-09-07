@@ -117,6 +117,54 @@ export const CITY_POIS = {
       { name: 'Jefferson Memorial', lat: 38.8814, lon: -77.0365, alt: 400, pitch: -30, heading: 0, buildingHeight: 25 },
     ],
   },
+  jakarta: {
+    name: 'Jakarta',
+    groundElevation: 8,
+    viewBounds: { southwest: { lat: -6.37, lng: 106.68 }, northeast: { lat: -6.09, lng: 106.98 } },
+    pois: [
+      { name: 'Monas (National Monument)', lat: -6.1754, lon: 106.8272, alt: 650, pitch: -28, heading: 0, buildingHeight: 45 },
+      { name: 'Bundaran HI', lat: -6.1944, lon: 106.823, alt: 500, pitch: -25, heading: 30, buildingHeight: 25 },
+      { name: 'Kota Tua Fatahillah', lat: -6.1352, lon: 106.8133, alt: 500, pitch: -25, heading: 180, buildingHeight: 20 },
+      { name: 'Gelora Bung Karno', lat: -6.2186, lon: 106.8026, alt: 800, pitch: -30, heading: 90, buildingHeight: 30 },
+      { name: 'Ancol Beach', lat: -6.1256, lon: 106.8303, alt: 800, pitch: -30, heading: 0, buildingHeight: 15 },
+    ],
+  },
+  surabaya: {
+    name: 'Surabaya',
+    groundElevation: 6,
+    viewBounds: { southwest: { lat: -7.35, lng: 112.60 }, northeast: { lat: -7.18, lng: 112.85 } },
+    pois: [
+      { name: 'Tunjungan / Genteng', lat: -7.2575, lon: 112.7345, alt: 550, pitch: -25, heading: 30, buildingHeight: 30 },
+      { name: 'Suramadu Bridge South', lat: -7.1833, lon: 112.7808, alt: 1200, pitch: -25, heading: 0, buildingHeight: 50 },
+      { name: 'Ciputra World Surabaya', lat: -7.2933, lon: 112.7179, alt: 500, pitch: -25, heading: 180, buildingHeight: 60 },
+      { name: 'Tunjungan Plaza', lat: -7.262, lon: 112.738, alt: 450, pitch: -25, heading: 90, buildingHeight: 40 },
+      { name: 'Kenjeran Beach', lat: -7.2358, lon: 112.7838, alt: 700, pitch: -30, heading: 0, buildingHeight: 15 },
+    ],
+  },
+  bali: {
+    name: 'Denpasar',
+    groundElevation: 12,
+    viewBounds: { southwest: { lat: -8.82, lng: 115.05 }, northeast: { lat: -8.55, lng: 115.35 } },
+    pois: [
+      { name: 'Bajra Sandhi Monument', lat: -8.6705, lon: 115.2126, alt: 550, pitch: -25, heading: 0, buildingHeight: 35 },
+      { name: 'Kuta Beach', lat: -8.7184, lon: 115.1686, alt: 700, pitch: -30, heading: 270, buildingHeight: 10 },
+      { name: 'Uluwatu Temple', lat: -8.8142, lon: 115.0859, alt: 600, pitch: -25, heading: 225, buildingHeight: 20 },
+      { name: 'Ngurah Rai Airport', lat: -8.7482, lon: 115.167, alt: 900, pitch: -30, heading: 90, buildingHeight: 15 },
+      { name: 'Tanah Lot', lat: -8.6216, lon: 115.0868, alt: 600, pitch: -25, heading: 270, buildingHeight: 15 },
+    ],
+  },
+  bandung: {
+    name: 'Bandung',
+    groundElevation: 768,
+    viewBounds: { southwest: { lat: -7.02, lng: 107.50 }, northeast: { lat: -6.83, lng: 107.73 } },
+    pois: [
+      { name: 'Gedung Sate', lat: -6.9025, lon: 107.6188, alt: 500, pitch: -25, heading: 180, buildingHeight: 30 },
+      { name: 'Trans Studio Bandung', lat: -6.9269, lon: 107.6367, alt: 500, pitch: -25, heading: 45, buildingHeight: 35 },
+      { name: 'Dago / Cikapayang', lat: -6.8857, lon: 107.6131, alt: 550, pitch: -25, heading: 0, buildingHeight: 20 },
+      { name: 'Alun-Alun Bandung', lat: -6.9219, lon: 107.6071, alt: 450, pitch: -28, heading: 90, buildingHeight: 20 },
+      { name: 'Lembang / Tangkuban View', lat: -6.8194, lon: 107.615, alt: 1500, pitch: -35, heading: 0, buildingHeight: 50 },
+    ],
+  },
 };
 
 /**
