@@ -3,9 +3,11 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   allocatePanelStackHeights,
+  MOBILE_SINGLE_SHEET_PANEL_IDS,
   panelStackAutoCollapseIndices,
   resolveLeftStackBottomBoundary,
   resolvePanelStackCorridor,
+  shouldUseSingleSheetPanel,
 } from './panelStackLayout.js';
 
 // Measured in Cockpit at 1512x790: CONTACT card at y541, HUD corner at y659,
@@ -286,4 +288,26 @@ test('expanded right panels highlight the title divider without changing collaps
     css,
     /#param-slider-panel:not\(\.collapsed\) \.param-panel-divider\s*\{[\s\S]*?linear-gradient\(90deg, rgb\(0 212 255 \/ 28%\), rgba\(0, 212, 255, 0\.18\) 58%, transparent\);/,
   );
+});
+
+test('mobile single-sheet triggers on narrow viewports or coarse pointers only', () => {
+  assert.equal(shouldUseSingleSheetPanel({ viewportWidth: 412, coarsePointer: false }), true);
+  assert.equal(shouldUseSingleSheetPanel({ viewportWidth: 760, coarsePointer: false }), true);
+  assert.equal(shouldUseSingleSheetPanel({ viewportWidth: 761, coarsePointer: false }), false);
+  assert.equal(shouldUseSingleSheetPanel({ viewportWidth: 1440, coarsePointer: false }), false);
+  assert.equal(shouldUseSingleSheetPanel({ viewportWidth: 1440, coarsePointer: true }), true);
+  assert.equal(shouldUseSingleSheetPanel({ viewportWidth: 0, coarsePointer: false }), false);
+  assert.equal(shouldUseSingleSheetPanel(), false);
+});
+
+test('mobile single-sheet lane covers every floating panel id exactly once', () => {
+  assert.deepEqual([...MOBILE_SINGLE_SHEET_PANEL_IDS].sort(), [
+    'cctv-panel',
+    'control-panel',
+    'data-panel',
+    'global-context-panel',
+    'location-bar',
+    'radio-panel',
+    'scene-panel',
+  ]);
 });

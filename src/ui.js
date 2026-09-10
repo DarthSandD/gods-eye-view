@@ -114,9 +114,11 @@ import {
 } from './rightRailPolicy.js';
 import {
   allocatePanelStackHeights,
+  MOBILE_SINGLE_SHEET_PANEL_IDS,
   panelStackAutoCollapseIndices,
   resolveLeftStackBottomBoundary,
   resolvePanelStackCorridor,
+  shouldUseSingleSheetPanel,
 } from './panelStackLayout.js';
 import {
   resolveCockpitUtilityAnchor,
@@ -7684,6 +7686,28 @@ export class StyleManager {
     if (!panelEl) return;
     if (explicit && !restore) this.shareLinkManager?.claimRestoreLane?.('panel', panelId);
     const nextCollapsed = Boolean(collapsed);
+    // Mobile single-sheet: a phone screen fits one floating panel, so expanding
+    // one collapses the rest. Desktop (wide viewport, fine pointer) never enters
+    // this branch and keeps multi-panel behavior. No recursion: collapsing peers
+    // never re-triggers the expand path.
+    if (!nextCollapsed && MOBILE_SINGLE_SHEET_PANEL_IDS.includes(panelId)) {
+      const useSingleSheet = typeof window === 'undefined'
+        ? false
+        : shouldUseSingleSheetPanel({
+          viewportWidth: window.innerWidth || 0,
+          coarsePointer: window.matchMedia?.('(pointer: coarse)')?.matches || false,
+        });
+      if (useSingleSheet) {
+        for (const otherId of MOBILE_SINGLE_SHEET_PANEL_IDS) {
+          if (otherId === panelId) continue;
+          const other = document.getElementById(otherId);
+          if (other && !other.classList.contains('collapsed')) {
+            other.classList.add('collapsed');
+            this._syncPanelCollapseButton(other);
+          }
+        }
+      }
+    }
     const wasAutoCollapsed = panelEl.classList.contains('layout-auto-collapsed');
     const leftOwnerPanel = this._leftPanelStack?.contains(panelEl) ? panelEl : null;
     const rightOwnerPanel = panelId === 'radio-panel'

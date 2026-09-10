@@ -98,6 +98,36 @@ export function panelStackAutoCollapseIndices({
 }
 
 /**
+ * Floating panels that share the single mobile sheet lane. On narrow viewports
+ * or coarse pointers only one of these stays expanded at a time — a phone
+ * screen fits one sheet, while desktop keeps multi-panel behavior untouched.
+ * @type {readonly string[]}
+ */
+export const MOBILE_SINGLE_SHEET_PANEL_IDS = Object.freeze([
+  'control-panel',
+  'location-bar',
+  'data-panel',
+  'cctv-panel',
+  'scene-panel',
+  'global-context-panel',
+  'radio-panel',
+]);
+
+/**
+ * Whether the viewport/input calls for single-sheet panel behavior.
+ * Pure over injected measurements (no window read) so it stays unit-testable.
+ * @param {object} [input] Environment measurements.
+ * @param {number} [input.viewportWidth=0] CSS viewport width in px (0 = unknown).
+ * @param {boolean} [input.coarsePointer=false] Whether the primary input is coarse (touch).
+ * @returns {boolean} True when only one floating panel should stay expanded.
+ */
+export function shouldUseSingleSheetPanel({ viewportWidth = 0, coarsePointer = false } = {}) {
+  if (Boolean(coarsePointer)) return true;
+  const width = Number(viewportWidth);
+  return Number.isFinite(width) && width > 0 && width <= 760;
+}
+
+/**
  * Balance a desktop panel corridor around the viewport midpoint without
  * crossing its measured obstacle boundaries. If centering would shrink the
  * lane below its usable minimum, retain the original aligned corridor.

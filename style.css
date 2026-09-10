@@ -6883,6 +6883,20 @@ body.scene-playback-mode :is(#clear-selected-layers, #reset-globe-view) {
     width: auto;
   }
 
+  /* Mobile single-sheet: one expanded floating panel at a time, docked to the
+     bottom as a scrollable sheet so panels never stack mid-screen. */
+  #data-panel:not(.collapsed),
+  #scene-panel:not(.collapsed),
+  #cctv-panel:not(.collapsed) {
+    left: 16px;
+    right: 16px;
+    width: auto;
+    top: auto;
+    bottom: 12px;
+    max-height: 46vh;
+    overflow-y: auto;
+  }
+
   /* Narrow viewports: cap the preview height to keep the panel compact. Cap
      the IMAGE, not the wrap — the wrap is overflow:hidden, so capping it would
      re-crop the very timestamp this is protecting. object-fit: contain then
