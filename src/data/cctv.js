@@ -252,6 +252,13 @@ const CAMERA_SEEDS = [
 
   { id: 'austin-congress-s', cityId: 'austin', poiIndex: 0, label: 'Congress Southbound', offsetNorthM: -165, offsetEastM: 40, headingDeg: 12, fovDeg: 74, rangeM: 760, elevationM: 24 },
   { id: 'austin-downtown-west', cityId: 'austin', poiIndex: 1, label: 'Downtown West', offsetNorthM: -120, offsetEastM: -160, headingDeg: 120, fovDeg: 69, rangeM: 700, elevationM: 20 },
+
+  { id: 'jakarta-monas-n', cityId: 'jakarta', poiIndex: 0, label: 'Monas North Gate', offsetNorthM: 150, offsetEastM: -60, headingDeg: 185, fovDeg: 72, rangeM: 720, elevationM: 24 },
+  { id: 'jakarta-hi-roundabout', cityId: 'jakarta', poiIndex: 1, label: 'Bundaran HI Loop', offsetNorthM: -120, offsetEastM: 90, headingDeg: 5, fovDeg: 70, rangeM: 680, elevationM: 22 },
+  { id: 'jakarta-kota-tua', cityId: 'jakarta', poiIndex: 2, label: 'Kota Tua Square', offsetNorthM: 80, offsetEastM: 110, headingDeg: 250, fovDeg: 68, rangeM: 640, elevationM: 20 },
+  { id: 'jakarta-gbk-east', cityId: 'jakarta', poiIndex: 3, label: 'GBK East Gate', offsetNorthM: 60, offsetEastM: 170, headingDeg: 275, fovDeg: 74, rangeM: 760, elevationM: 24 },
+  { id: 'serang-square-s', cityId: 'serang', poiIndex: 0, label: 'Alun-Alun South', offsetNorthM: -110, offsetEastM: 30, headingDeg: 10, fovDeg: 70, rangeM: 660, elevationM: 20 },
+  { id: 'serang-banten-lama', cityId: 'serang', poiIndex: 1, label: 'Banten Lama Gate', offsetNorthM: 90, offsetEastM: -50, headingDeg: 190, fovDeg: 68, rangeM: 620, elevationM: 20 },
 ];
 
 // ---------------------------------------------------------------------------

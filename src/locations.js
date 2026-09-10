@@ -118,6 +118,28 @@ export const CITY_POIS = {
       { name: 'Jefferson Memorial', lat: 38.8814, lon: -77.0365, alt: 400, pitch: -30, heading: 0, buildingHeight: 25 },
     ],
   },
+  jakarta: {
+    name: 'Jakarta',
+    groundElevation: 8,
+    viewBounds: { southwest: { lat: -6.36, lng: 106.68 }, northeast: { lat: -6.09, lng: 106.95 } },
+    pois: [
+      { name: 'Monas (National Monument)', lat: -6.1754, lon: 106.8227, alt: 600, pitch: -25, heading: 0, buildingHeight: 65 },
+      { name: 'Bundaran HI', lat: -6.1949, lon: 106.8231, alt: 500, pitch: -25, heading: 180, buildingHeight: 40 },
+      { name: 'Kota Tua (Fatahillah)', lat: -6.1352, lon: 106.8133, alt: 400, pitch: -30, heading: 90, buildingHeight: 20 },
+      { name: 'GBK Stadium', lat: -6.2186, lon: 106.8029, alt: 600, pitch: -30, heading: 0, buildingHeight: 35 },
+      { name: 'Soekarno-Hatta Airport T3', lat: -6.1256, lon: 106.6559, alt: 800, pitch: -35, heading: 90, buildingHeight: 25 },
+    ],
+  },
+  serang: {
+    name: 'Serang',
+    groundElevation: 25,
+    viewBounds: { southwest: { lat: -6.22, lng: 106.05 }, northeast: { lat: -6.02, lng: 106.25 } },
+    pois: [
+      { name: 'Alun-Alun Kota Serang', lat: -6.1198, lon: 106.1503, alt: 400, pitch: -25, heading: 0, buildingHeight: 15 },
+      { name: 'Banten Lama Heritage Zone', lat: -6.0375, lon: 106.1557, alt: 450, pitch: -30, heading: 180, buildingHeight: 20 },
+      { name: 'Ciceri Junction', lat: -6.1310, lon: 106.1580, alt: 400, pitch: -25, heading: 270, buildingHeight: 15 },
+    ],
+  },
 };
 
 /**
