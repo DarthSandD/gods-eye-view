@@ -7738,6 +7738,9 @@ export default defineConfig(({ mode }) => {
   const env = { ...process.env };
   const localAllowedHosts = ['localhost', '127.0.0.1', '.local'];
   return {
+    // Relative base so the built app resolves under any subpath (GitHub Pages
+    // serves this repo as a project site under /gods-eye-view/).
+    base: './',
     plugins: [
       cesium(),
       openSkyProxy(),
