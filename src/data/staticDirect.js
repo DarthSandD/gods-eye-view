@@ -22,7 +22,7 @@ export const OVERPASS_DIRECT_MIRRORS = Object.freeze([
   'https://overpass.private.coffee/api/interpreter',
 ]);
 
-/** CelesTrak GP/TLE endpoint for one group (no CORS headers upstream — expect degrade). */
+/** CelesTrak GP/TLE endpoint for one group (CORS-open: sends Access-Control-Allow-Origin *, verified live). */
 export function celestrakDirectUrl(group) {
   const url = new URL('https://celestrak.org/NORAD/elements/gp.php');
   url.searchParams.set('GROUP', String(group));
@@ -30,7 +30,7 @@ export function celestrakDirectUrl(group) {
   return url.toString();
 }
 
-/** Anonymous OpenSky states endpoint (keyless, CORS *). */
+/** Anonymous OpenSky states endpoint (keyless, but browser-restricted: ACAO allows only opensky-network.org, so expect degrade on static hosts). */
 export const OPENSKY_DIRECT_BASE = 'https://opensky-network.org/api/states/all';
 
 /** Half-width in degrees of the anonymous OpenSky bbox around the view anchor. */
@@ -70,7 +70,7 @@ export function openskyTrackDirectUrl(icao24) {
   return `https://opensky-network.org/api/tracks/all?icao24=${encodeURIComponent(String(icao24))}&time=0`;
 }
 
-/** Keyless adsb.lol military snapshot (CORS *). */
+/** Keyless adsb.lol military snapshot (no CORS headers upstream — expect degrade on static hosts, proxy path preferred). */
 export const ADSB_LOL_MIL_DIRECT = 'https://api.adsb.lol/v2/mil';
 
 /** Direct adsb.lol readsb trace (mirrors the /api/adsblol/trace proxy upstream). */
