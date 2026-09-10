@@ -312,6 +312,10 @@ export class GevRealtimeController {
     this.shortcutBlurHandler = null;
     this.shortcutVisibilityHandler = null;
     this.status = 'idle';
+    // Keyless Web Speech API fallback session (static hosting has no
+    // /api/realtime/token backend). Null unless the fallback is active.
+    this.localRecognition = null;
+    this.localVoiceActive = false;
     // Monotonic generation token. Every start()/stop() bumps it; an in-flight
     // start() captures its value and bails after each await if it no longer
     // matches, so a stop() (or a second start()) mid-connect cannot leave an
@@ -374,7 +378,20 @@ export class GevRealtimeController {
     let localStream = null;
     let localPc = null;
     try {
-      const minted = await fetchRealtimeToken(this.voiceTier);
+      let minted = null;
+      try {
+        minted = await fetchRealtimeToken(this.voiceTier);
+      } catch (tokenError) {
+        if (this.abandonStart(epoch, { localStream, localPc })) return;
+        // Static hosting has no /api/realtime/token backend: fall back to the
+        // free on-device Web Speech API instead of surfacing VOICE SYSTEM
+        // ERROR. The Realtime path below is untouched when a backend exists.
+        if (getLocalSpeechRecognitionCtor()) {
+          this.startLocalVoiceFallback(tokenError);
+          return;
+        }
+        throw tokenError;
+      }
       const token = minted.token;
       if (this.abandonStart(epoch, { localStream, localPc })) return;
       // Bind the session meter to the model actually served. An env override
@@ -769,6 +786,20 @@ export class GevRealtimeController {
 
   stop(options = {}) {
     const { removeUi = false, preserveStatus = false, preserveRadioPlayback = false } = options;
+    // Tear down a keyless speech-recognition session first: detach handlers so
+    // its onend auto-restart cannot resurrect it, then stop it (idempotent).
+    if (this.localRecognition) {
+      const recognition = this.localRecognition;
+      this.localRecognition = null;
+      this.localVoiceActive = false;
+      try {
+        recognition.onend = null;
+        recognition.onresult = null;
+        recognition.onerror = null;
+        recognition.abort?.();
+        recognition.stop?.();
+      } catch { /* already stopped — no-op */ }
+    }
     // Bump the epoch so any start() awaiting a token/getUserMedia/SDP bails and
     // releases its own resources instead of promoting them onto a stopped
     // controller (H7).
@@ -893,6 +924,104 @@ export class GevRealtimeController {
       this.setStatus('idle', 'Voice off');
     }
     this.setRadioVoiceDucking(false);
+  }
+
+  /**
+   * Start the keyless on-device speech-recognition fallback after the
+   * /api/realtime/token mint failed (static hosting has no backend). Heard
+   * transcripts route into the existing gev action runner as location-search
+   * commands. Status stays on plain detail text — never VOICE SYSTEM ERROR —
+   * while this path is available.
+   * @param {Error|null} tokenError
+   * @returns {boolean} true when the fallback session started
+   */
+  startLocalVoiceFallback(tokenError = null) {
+    const Ctor = getLocalSpeechRecognitionCtor();
+    if (!Ctor) return false;
+    try {
+      const recognition = new Ctor();
+      try { recognition.lang = recognition.lang || 'en-US'; } catch { /* keep engine default */ }
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+      try { recognition.continuous = true; } catch { /* one-shot engines restart via onend */ }
+      this.localRecognition = recognition;
+      this.localVoiceActive = true;
+      recognition.onresult = (event) => { void this.handleLocalVoiceResult(event); };
+      recognition.onerror = (event) => this.handleLocalVoiceError(event);
+      recognition.onend = () => {
+        // One-shot engines stop after each utterance — keep listening while active.
+        if (this.localVoiceActive && this.localRecognition === recognition) {
+          try { recognition.start(); } catch { /* already started — no-op */ }
+        }
+      };
+      recognition.start();
+    } catch {
+      this.localRecognition = null;
+      this.localVoiceActive = false;
+      this.setStatus('idle', 'Local voice unavailable — check microphone permission');
+      return false;
+    }
+    if (tokenError) {
+      console.warn(
+        '[GEV voice] Realtime backend unavailable; using on-device speech recognition.',
+        tokenError?.message || tokenError,
+      );
+    }
+    this.setStatus('listening', 'Local voice — say "fly to …"');
+    return true;
+  }
+
+  /**
+   * Route a fallback recognition result into the gev action runner as a
+   * location-search command.
+   * @param {{ results?: ArrayLike<{ 0?: { transcript?: string } }> }} event
+   */
+  async handleLocalVoiceResult(event) {
+    let transcript = '';
+    for (const result of event?.results || []) {
+      const best = result?.[0];
+      if (best?.transcript) transcript += `${best.transcript} `;
+    }
+    transcript = transcript.trim();
+    if (!transcript) return;
+    const command = parseLocalVoiceCommand(transcript);
+    if (!command) return;
+    this.setStatus('executing', `Heard "${compactText(transcript, 60)}"`);
+    try {
+      const outcome = await this.runner(command.action, command.args);
+      if (!this.localVoiceActive) return;
+      const label = outcome?.label || command.args.query;
+      this.setStatus('listening', outcome
+        ? `At ${compactText(label, 60)} — say "fly to …"`
+        : `No match for "${compactText(label, 40)}" — try again`);
+    } catch {
+      if (!this.localVoiceActive) return;
+      this.setStatus('listening', 'Search failed — try again');
+    }
+  }
+
+  /**
+   * Fallback recognition error policy: fatal mic blocks end the fallback with
+   * plain detail text; transient errors keep listening. Never the VOICE SYSTEM
+   * ERROR tray while this path is alive.
+   * @param {{ error?: string }} event
+   */
+  handleLocalVoiceError(event) {
+    const kind = event?.error || 'unknown';
+    if (kind === 'not-allowed' || kind === 'service-not-allowed') {
+      this.localVoiceActive = false;
+      const recognition = this.localRecognition;
+      this.localRecognition = null;
+      try {
+        if (recognition) {
+          recognition.onend = null;
+          recognition.abort?.();
+        }
+      } catch { /* no-op */ }
+      this.setStatus('idle', 'Microphone blocked — allow access and try again');
+      return;
+    }
+    this.setStatus('listening', 'Did not catch that — say "fly to …"');
   }
 
   /**
@@ -2304,6 +2433,39 @@ function isNearlyBlackFrame(ctx, width, height) {
 }
 
 /**
+ * Keyless voice fallback: the Web Speech API constructor (standard or
+ * webkit-prefixed), or null where unsupported (e.g. headless node, Firefox
+ * desktop without a recognition service). Never throws. Exported for tests.
+ * @param {{ SpeechRecognition?: Function, webkitSpeechRecognition?: Function }|undefined} scope
+ * @returns {Function|null}
+ */
+export function getLocalSpeechRecognitionCtor(scope = undefined) {
+  const win = scope !== undefined
+    ? scope
+    : (typeof window !== 'undefined' ? window : undefined);
+  const ctor = win?.SpeechRecognition || win?.webkitSpeechRecognition || null;
+  return typeof ctor === 'function' ? ctor : null;
+}
+
+/** Leading command verbs stripped so "fly to Austin" searches for Austin. */
+const LOCAL_VOICE_LOCATION_PREFIX = /^(?:please\s+)?(?:fly(?:\s+me)?|go|navigate|zoom|take\s+me|bring\s+me|show\s+me|centre\s+on|center\s+on|look\s+at)\s+(?:to\b(?:\s+the\b)?|at\b(?:\s+the\b)?|towards?\b(?:\s+the\b)?|over\b(?:\s+the\b)?)?\s*/i;
+
+/**
+ * Route a free speech-recognition transcript into the existing gev action
+ * runner. Location voice commands execute as `fly_to_location` searches (the
+ * same runner + searchAndFlyTo path the Realtime model calls), so no backend
+ * is needed. Returns null for empty transcripts. Exported for tests.
+ * @param {string} transcript
+ * @returns {{ action: string, args: { query: string } }|null}
+ */
+export function parseLocalVoiceCommand(transcript) {
+  const text = String(transcript || '').replace(/\s+/g, ' ').trim();
+  if (!text) return null;
+  const query = text.replace(LOCAL_VOICE_LOCATION_PREFIX, '').trim() || text;
+  return { action: 'fly_to_location', args: { query } };
+}
+
+/**
  * Mint an ephemeral Realtime client secret.
  *
  * Returns the model the session will ACTUALLY run on alongside the token: the
@@ -2539,6 +2701,27 @@ function resetVoiceVisualizerBars(bars) {
   }
 }
 
+/**
+ * Base-relative public-asset URL (./mic.svg etc.) so icons resolve when the
+ * app is served from a subpath such as GitHub Pages' /gods-eye-view/.
+ * `import.meta.env` is a build-time define — plain node (unit tests) has no
+ * `env` on it, so the read is guarded and falls back to './'.
+ * Exported for tests.
+ * @param {string} name
+ * @returns {string}
+ */
+export function appAssetUrl(name) {
+  let base = './';
+  try {
+    const envBase = import.meta.env.BASE_URL;
+    if (typeof envBase === 'string' && envBase) base = envBase;
+  } catch {
+    base = './';
+  }
+  if (!base.endsWith('/')) base += '/';
+  return `${base}${String(name || '').replace(/^\/+/, '')}`;
+}
+
 function createVoiceControl({ reset = false } = {}) {
   let root = document.getElementById('gev-voice-control');
   if (root && reset) {
@@ -2560,7 +2743,7 @@ function createVoiceControl({ reset = false } = {}) {
         </div>
       </div>
       <button id="gev-voice-button" type="button" aria-label="Voice control — hold Space to speak; click to toggle voice" aria-describedby="gev-voice-help">
-        <span class="gev-mic-orbit"><img src="/mic.svg" alt="" /></span>
+        <span class="gev-mic-orbit"><img src="${appAssetUrl('mic.svg')}" alt="" /></span>
         <span class="gev-mic-label">ON/OFF</span>
       </button>
       <div class="gev-voice-visualizer" aria-hidden="true">

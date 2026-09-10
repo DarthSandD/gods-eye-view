@@ -341,18 +341,31 @@ export function findPoiByName(query) {
 /** Distinguishes an authority veto from a genuine not-found result. */
 export const CANCELLED_SEARCH = Object.freeze({ cancelled: true });
 
+/** Keyless OpenStreetMap geocoder endpoint (no API key required). */
+const NOMINATIM_SEARCH_URL = 'https://nominatim.openstreetmap.org/search';
+
 /**
- * Geocode a place name using Google Geocoding API, then fly there at a scale
- * appropriate to the request. Countries and cities use their viewport by
- * default; precise landmarks/buildings use close landmark framing.
+ * Read the configured Google Maps API key without throwing outside a bundler.
+ * `import.meta.env` is a build-time define — plain node (unit tests) has no
+ * `env` on it, so the read is guarded.
+ * @returns {string|undefined}
  */
-export async function searchAndFlyTo(viewer, query, options = {}) {
-  const apiKey = window.__GOOGLE_MAPS_API_KEY__ || import.meta.env.GOOGLE_MAPS_API_KEY;
-  if (!apiKey) throw new Error('No Google Maps API key available for geocoding');
+function googleMapsApiKey() {
+  if (typeof window !== 'undefined' && window.__GOOGLE_MAPS_API_KEY__) {
+    return window.__GOOGLE_MAPS_API_KEY__;
+  }
+  try {
+    return import.meta.env.GOOGLE_MAPS_API_KEY || undefined;
+  } catch {
+    return undefined;
+  }
+}
 
-  const beforeFly = typeof options.beforeFly === 'function' ? options.beforeFly : null;
-  const mayFly = () => beforeFly === null || beforeFly() !== false;
-
+/**
+ * Viewport-biased Google geocode, normalized to { lat, lng, label, types, viewport }.
+ * Returns null on no-match; throws on network failure (caller falls through to Nominatim).
+ */
+async function geocodeWithGoogle(viewer, query, apiKey) {
   // Viewport-biased geocode — the same bias annotationResolver's geocodePlace uses:
   // "Sixth Street" spoken over Austin must prefer the Sixth Street on screen, not a
   // same-named road in another city (or the wrong end of town — the W 6th vs E 6th bug).
@@ -362,12 +375,106 @@ export async function searchAndFlyTo(viewer, query, options = {}) {
   const response = await fetch(url);
   const data = await response.json();
 
-  const result = (data.status === 'OK' && data.results?.length) ? data.results[0] : null;
-  let lat = result?.geometry.location.lat;
-  let lng = result?.geometry.location.lng;
-  let label = result ? result.formatted_address : null;
+  const hit = (data.status === 'OK' && data.results?.length) ? data.results[0] : null;
+  if (!hit) return null;
+  return {
+    lat: hit.geometry.location.lat,
+    lng: hit.geometry.location.lng,
+    label: hit.formatted_address,
+    types: hit.types || [],
+    viewport: hit.geometry.bounds || hit.geometry.viewport || null,
+  };
+}
+
+/**
+ * Map a Nominatim hit to Google-style geocode `types` so the existing
+ * camera-framing modes (geocodeNavigationMode) keep working: cities frame
+ * their viewport, streets frame their corridor, unknown features stay precise.
+ * Exported for tests.
+ * @param {{ class?: string, type?: string, addresstype?: string }} hit
+ * @returns {string[]}
+ */
+export function nominatimTypesFor(hit) {
+  const kind = String(hit?.addresstype || hit?.type || '').toLowerCase();
+  if (kind === 'country') return ['country', 'political'];
+  if (['state', 'province', 'region', 'county', 'district', 'territory'].includes(kind)) {
+    return ['administrative_area_level_1', 'political'];
+  }
+  if (['city', 'town', 'village', 'hamlet', 'municipality', 'borough'].includes(kind)) {
+    return ['locality', 'political'];
+  }
+  if (['suburb', 'neighbourhood', 'neighborhood', 'quarter', 'postcode', 'postal_code'].includes(kind)) {
+    return ['neighborhood', 'political'];
+  }
+  if (['road', 'street', 'footway', 'cycleway', 'path', 'motorway', 'trunk', 'primary', 'secondary', 'tertiary', 'residential', 'unclassified'].includes(kind)) {
+    return ['route'];
+  }
+  if (['park', 'forest', 'wood', 'meadow', 'grass', 'water', 'bay', 'strait', 'peak', 'aerodrome', 'university', 'college', 'campus'].includes(kind)) {
+    return ['park'];
+  }
+  return [];
+}
+
+/**
+ * Keyless OpenStreetMap Nominatim geocode, normalized to the same
+ * { lat, lng, label, types, viewport } shape as geocodeWithGoogle.
+ * Returns null on no-match; throws ONLY on network failure so the caller can
+ * surface 'Search failed' instead of 'Location not found'.
+ */
+export async function geocodeWithNominatim(query) {
+  const url = `${NOMINATIM_SEARCH_URL}?format=jsonv2&addressdetails=0&limit=1&q=${encodeURIComponent(query)}`;
+  const response = await fetch(url, { headers: { Accept: 'application/json' } });
+  if (!response.ok) throw new Error(`Nominatim search failed: HTTP ${response.status}`);
+  const data = await response.json();
+  const hit = Array.isArray(data) ? data[0] : null;
+  if (!hit || !Number.isFinite(Number(hit.lat)) || !Number.isFinite(Number(hit.lon))) return null;
+  const box = Array.isArray(hit.boundingbox) ? hit.boundingbox.map(Number) : [];
+  const viewport = box.length === 4 && box.every(Number.isFinite)
+    ? { southwest: { lat: box[0], lng: box[2] }, northeast: { lat: box[1], lng: box[3] } }
+    : null;
+  return {
+    lat: Number(hit.lat),
+    lng: Number(hit.lon),
+    label: hit.display_name || query,
+    types: nominatimTypesFor(hit),
+    viewport,
+  };
+}
+
+/**
+ * Geocode a place name using Google Geocoding API, then fly there at a scale
+ * appropriate to the request. Countries and cities use their viewport by
+ * default; precise landmarks/buildings use close landmark framing.
+ *
+ * Keyless fallback: when no Google key is configured (static hosting ships an
+ * empty build-time key and has no /api proxy backend) or the Google lookup
+ * misses/fails, the query falls through to OpenStreetMap Nominatim, which
+ * needs no key. Toast semantics are unchanged: null → 'Location not found',
+ * throw → 'Search failed'.
+ */
+export async function searchAndFlyTo(viewer, query, options = {}) {
+  const apiKey = googleMapsApiKey();
+
+  const beforeFly = typeof options.beforeFly === 'function' ? options.beforeFly : null;
+  const mayFly = () => beforeFly === null || beforeFly() !== false;
+
+  // Google first when a key exists; keyless Nominatim when the key is missing
+  // or the Google lookup misses/fails.
+  let result = null;
+  if (apiKey) {
+    try {
+      result = await geocodeWithGoogle(viewer, query, apiKey);
+    } catch {
+      result = null;
+    }
+  }
+  if (!result) result = await geocodeWithNominatim(query);
+
+  let lat = result?.lat;
+  let lng = result?.lng;
+  let label = result ? result.label : null;
   let types = result?.types || [];
-  let viewport = result ? (result.geometry.bounds || result.geometry.viewport) : null;
+  let viewport = result ? result.viewport : null;
 
   // Places-near-view recovery (annotationResolver's twin): a missed geocode, or one
   // that landed implausibly far from the view centre, snaps back to a view-biased
