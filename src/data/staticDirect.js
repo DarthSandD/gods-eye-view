@@ -120,6 +120,85 @@ export function isAbortError(error) {
     || String(error?.message || '').toLowerCase().includes('aborted');
 }
 
+// ---------------------------------------------------------------------------
+// API base: where same-origin /api/* calls go (static hosting + Workers)
+// ---------------------------------------------------------------------------
+
+/**
+ * Normalize a configured API base: trimmed, no trailing slashes.
+ * Empty/blank input yields '' (same-origin relative behavior, unchanged).
+ */
+export function normalizeApiBase(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+  return text.replace(/\/+$/, '');
+}
+
+/**
+ * Read the build-time API base (Vite `define`, see vite.config.js).
+ * The direct `import.meta.env.GEV_API_BASE` member access is intentional so
+ * Vite statically replaces it at build time; the guarded read keeps plain
+ * Node (unit tests) working where `import.meta.env` is undefined.
+ */
+function readBuildApiBase() {
+  try {
+    if (typeof import.meta.env?.GEV_API_BASE === 'string') return import.meta.env.GEV_API_BASE;
+  } catch { /* plain Node: no import.meta.env — fall through to '' */ }
+  return '';
+}
+
+let bootApiBaseRead = false;
+let bootApiBaseValue = '';
+
+/** Read the `?api=<base>` boot override once (cached; see resolveApiBase). */
+function readBootApiBaseOverride() {
+  if (bootApiBaseRead) return bootApiBaseValue;
+  bootApiBaseRead = true;
+  bootApiBaseValue = '';
+  try {
+    const search = globalThis.location?.search;
+    if (typeof search === 'string' && search) {
+      bootApiBaseValue = normalizeApiBase(new URLSearchParams(search).get('api'));
+    }
+  } catch { bootApiBaseValue = ''; }
+  return bootApiBaseValue;
+}
+
+/** Reset the cached `?api=` boot override (unit tests only). */
+export function resetApiBaseCacheForTests() {
+  bootApiBaseRead = false;
+  bootApiBaseValue = '';
+}
+
+/**
+ * Resolve the API base for proxied calls.
+ * Precedence: `?api=<base>` boot override > `window.__GEV_API_BASE__` >
+ * `import.meta.env.GEV_API_BASE` > `''` (same-origin, current static behavior).
+ */
+export function resolveApiBase() {
+  const boot = readBootApiBaseOverride();
+  if (boot) return boot;
+  try {
+    const runtime = globalThis.window?.__GEV_API_BASE__;
+    if (typeof runtime === 'string' && runtime.trim()) return normalizeApiBase(runtime);
+  } catch { /* ignore exotic window shims */ }
+  const build = readBuildApiBase();
+  if (build.trim()) return normalizeApiBase(build);
+  return '';
+}
+
+/**
+ * Prefix a same-origin `/api/*` proxy path with the configured API base.
+ * Absolute/direct upstream URLs pass through untouched, so this is safe to
+ * apply to every proxyUrl handed to fetchWithProxyFallback.
+ */
+export function proxyUrlWithBase(proxyUrl) {
+  if (typeof proxyUrl !== 'string' || !/^\/api(?=\/|$|\?)/.test(proxyUrl)) return proxyUrl;
+  const base = resolveApiBase();
+  if (!base) return proxyUrl;
+  return `${base}${proxyUrl}`;
+}
+
 /**
  * Fetch a same-origin proxy URL, falling back to direct upstream URLs when the
  * proxy is missing (static hosting 404), refuses, or is unreachable.
@@ -130,15 +209,17 @@ export function isAbortError(error) {
  * proxy's own error (429/500/auth) is returned untouched so rate limits,
  * backoffs, and serve-stale semantics keep working exactly as before.
  *
- * @param {string} proxyUrl - Same-origin /api/* URL.
+ * @param {string} proxyUrl - Same-origin /api/* URL (prefixed with the
+ *   configured API base, if any — see proxyUrlWithBase).
  * @param {string[]} directUrls - Direct upstream URLs tried after proxy failure.
  * @param {object} [init] - fetch init passed to every attempt.
  * @returns {Promise<{response: Response, source: string, triedDirect: boolean}>}
  */
 export async function fetchWithProxyFallback(proxyUrl, directUrls = [], init) {
+  const resolvedProxyUrl = proxyUrlWithBase(proxyUrl);
   let proxyResponse = null;
   try {
-    const res = await fetch(proxyUrl, init);
+    const res = await fetch(resolvedProxyUrl, init);
     if (res.ok) return { response: res, source: 'proxy', triedDirect: false };
     // The proxy answered with a real HTTP error (rate limit, upstream 5xx,
     // auth refusal): respect it exactly as before — only an ABSENT proxy

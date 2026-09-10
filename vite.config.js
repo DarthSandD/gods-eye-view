@@ -7788,9 +7788,13 @@ export default defineConfig(({ mode }) => {
       },
     },
     // Expose selected API keys to the browser via import.meta.env.*
+    // GEV_API_BASE (optional): absolute Worker/API origin prefixed onto every
+    // /api/* proxy call (see proxyUrlWithBase in src/data/staticDirect.js).
+    // Empty by default = same-origin relative behavior, unchanged.
     define: {
       'import.meta.env.GOOGLE_MAPS_API_KEY': JSON.stringify(env.GOOGLE_MAPS_API_KEY),
       'import.meta.env.CESIUM_ION_TOKEN': JSON.stringify(env.CESIUM_ION_TOKEN),
+      'import.meta.env.GEV_API_BASE': JSON.stringify(env.GEV_API_BASE ?? ''),
     },
     build: {
       // The Cesium engine bundle is inherently large; raise the warning ceiling
