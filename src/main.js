@@ -1,6 +1,6 @@
 import * as Cesium from 'cesium';
 import { StyleManager } from './ui.js';
-import { flyToAustin } from './camera.js';
+import { flyToAustin, setDefaultAustinView } from './camera.js';
 import { DataLayerManager } from './data/manager.js';
 import flightsLayer from './data/flights.js';
 import militaryFlightsLayer from './data/militaryFlights.js';
@@ -34,6 +34,7 @@ import { installScopeMask } from './scopeMask.js';
 import {
   COARSE_TILE_MAXIMUM_SCREEN_SPACE_ERROR,
   isCoarsePointer,
+  isMobileProfile,
   mobileViewerProfile,
 } from './mobile.js';
 import { initFirstRunExperience } from './firstRunExperience.js';
@@ -69,7 +70,7 @@ function describeError(error) {
 }
 
 /**
- * GOD'S EYE VIEW — Main Entry Point
+ * OMNI EYES VIEW — Main Entry Point
  * Initializes CesiumJS with Google Photorealistic 3D Tiles,
  * style system, intelligence HUD, location presets, and share links.
  */
@@ -217,10 +218,18 @@ async function init() {
     const weatherEffects = null;
     const cockpitCloudEffects = initCockpitCloudEffects(viewer);
 
-    // If no share link state, do default fly-to Austin
+    // If no share link state, land on the default Austin view. Desktop gets
+    // the cinematic fly-in; the mobile profile (coarse pointer or narrow
+    // viewport) skips it and sets the same framing statically — the dock
+    // locate button is the CTA for a personal fix. Never auto-prompts.
     if (!styleManager.hasShareState) {
-      loaderStatus.textContent = 'Flying to Austin, TX...';
-      flyToAustin(viewer);
+      if (isMobileProfile()) {
+        loaderStatus.textContent = 'Austin, TX';
+        setDefaultAustinView(viewer);
+      } else {
+        loaderStatus.textContent = 'Flying to Austin, TX...';
+        flyToAustin(viewer);
+      }
     } else {
       loaderStatus.textContent = 'Restoring shared view...';
     }
@@ -351,7 +360,7 @@ async function init() {
     window.__godsEyeView.voiceCommands = initGevVoiceCommands({ viewer, styleManager, dataManager, sceneDirector, annotations });
 
   } catch (error) {
-    console.error("God's Eye View initialization failed:", error);
+    console.error("Omni Eyes View initialization failed:", error);
     loaderStatus.textContent = `Error: ${describeError(error)}`;
     loaderStatus.style.color = '#ff4444';
   }

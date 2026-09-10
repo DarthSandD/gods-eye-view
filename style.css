@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════
-   GOD'S EYE VIEW — Dark Sci-Fi UI
+   OMNI EYES VIEW — Dark Sci-Fi UI
    Apple meets Blade Runner
    ═══════════════════════════════════════════════ */
 
@@ -9559,30 +9559,143 @@ body.scene-playback-mode #key-setup {
   }
 }
 
-/* 390px phones: the command dock becomes a bottom sheet instead of a centered
-   floating bar. NOTE: the credit-attribution pin (creditAttribution.test.mjs)
-   models #command-dock geometry exactly — only plain px/vh lengths here, no
-   env()/dvh/max-height, or the pin fails closed. */
-@media (max-width: 390px) {
-  #command-dock {
+/* ≤575px phones: the command dock becomes a TRUE bottom sheet — full-width,
+   bottom-anchored, trays stacked vertically — instead of a centered floating
+   bar. The old ≤390px rule set grid-template areas on what is now a FLEX
+   dock (the compact accordion above), so those declarations were dead; this
+   block speaks flex (flex-direction, stretch) instead.
+   NOTE: the credit-attribution pin (creditAttribution.test.mjs) models
+   #command-dock geometry exactly — only plain px/vh lengths on the geometry
+   props in this block, no env()/dvh/calc/max-height. Home-indicator clearance
+   via env(safe-area-inset-bottom) lives on padding-bottom in the separate
+   mobile-v2 block below, which the pin does not model. */
+@media (max-width: 575px) {
+  #command-dock,
+  #command-dock:has(#location-bar:not(.collapsed)),
+  #command-dock:has(#control-panel:not(.collapsed)) {
     left: 12px;
     right: 12px;
     bottom: 12px;
-    transform: none;
+    flex-direction: column;
+    align-items: stretch;
     width: auto;
-    grid-template-columns: 1fr;
-    grid-template-areas:
-      'locations'
-      'presets'
-      'voice';
-  }
-  #control-panel {
-    left: 12px;
-    right: 12px;
+    max-width: none;
     transform: none;
-    bottom: 12px;
+  }
+  #command-dock > #location-bar,
+  #command-dock > #control-panel,
+  #command-dock > #gev-voice-control {
+    flex: 1 1 auto;
+    align-self: stretch;
+    width: 100%;
+    margin: 0;
+    border: 0;
+  }
+  #command-dock > #location-bar {
+    border-bottom: 1px solid rgba(123, 189, 211, 0.16);
+  }
+  #command-dock > #control-panel {
+    border-top: 1px solid rgba(123, 189, 211, 0.16);
   }
   #top-center-actions {
     top: 12px;
+  }
+}
+
+/* ── Mobile v2: locate button, safe-area, zoom guard, touch targets ──── */
+
+/* Opt-in locate button in the dock location tray. Desktop keeps the compact
+   pill look; touch sizes are raised to 44px in the blocks below. */
+.locate-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.locate-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--glass-border-hover);
+}
+
+.locate-btn[aria-busy='true'] {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+/* Home-indicator clearance: padding only (never bottom/transform), so the
+   credit-attribution pin — which models #command-dock geometry exactly — is
+   unaffected. env() with a px fallback is safe on browsers without it. */
+@media (max-width: 575px) {
+  #command-dock {
+    padding-bottom: max(12px, env(safe-area-inset-bottom));
+  }
+  #command-dock #location-bar:not(.collapsed) .dock-popover-content,
+  #command-dock #control-panel:not(.collapsed) .dock-popover-content {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Stop iOS auto-zoom: any text input under 16px makes Safari zoom on focus.
+   Coarse pointers only — desktop keeps the compact 11-13px dock look. The
+   later order beats the #command-dock #location-search rules above at equal
+   specificity inside the media block. */
+@media (pointer: coarse) {
+  #location-search,
+  #location-search.expanded,
+  #command-dock #location-search,
+  #command-dock #location-search.expanded {
+    font-size: 16px;
+  }
+}
+
+/* 44px touch targets on coarse pointers… */
+@media (pointer: coarse) {
+  .search-toggle-btn,
+  #command-dock .search-toggle-btn {
+    width: 44px;
+    height: 44px;
+  }
+  #command-dock .style-btn,
+  #command-dock .location-pill,
+  .locate-btn,
+  #command-dock .locate-btn {
+    min-height: 44px;
+  }
+  .panel-collapse-btn {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* …and the same 44px targets under the small-screen width query, so narrow
+   desktop windows and touch-less small phones get them too. */
+@media (max-width: 575px) {
+  .search-toggle-btn,
+  #command-dock .search-toggle-btn {
+    width: 44px;
+    height: 44px;
+  }
+  #command-dock .style-btn,
+  #command-dock .location-pill,
+  .locate-btn,
+  #command-dock .locate-btn {
+    min-height: 44px;
+  }
+  .panel-collapse-btn {
+    min-width: 44px;
+    min-height: 44px;
   }
 }

@@ -1,5 +1,5 @@
 /**
- * God's Eye View — Cloudflare Workers API proxy (modules syntax, zero deps).
+ * Omni Eyes View — Cloudflare Workers API proxy (modules syntax, zero deps).
  *
  * Same-origin `/api/*` surface for static hosting (Cloudflare Pages +
  * Workers). Mirrors the upstream targets the Vite dev server proxies use

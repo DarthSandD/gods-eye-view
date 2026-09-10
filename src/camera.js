@@ -47,6 +47,44 @@ export function flyToPreset(viewer, presetName, duration = 3.0) {
 }
 
 /**
+ * Set the default Austin framing statically (no flight).
+ *
+ * Mobile profile boot calls this instead of flyToAustin: small-screen and
+ * coarse-pointer devices skip the 4s cinematic fly-in and land directly on
+ * the default view, with the dock locate button as the CTA for a personal
+ * fix. Share-link restores are unaffected (callers branch before this).
+ */
+export function setDefaultAustinView(viewer) {
+  viewer.camera.setView({
+    destination: Cesium.Cartesian3.fromDegrees(-97.7431, 30.2672, 600),
+    orientation: {
+      heading: Cesium.Math.toRadians(15),
+      pitch: Cesium.Math.toRadians(-30),
+      roll: 0.0,
+    },
+  });
+}
+
+/**
+ * Fly the camera to an explicit locate fix (user-tapped only).
+ * @param {object} viewer — Cesium viewer
+ * @param {number} latitude
+ * @param {number} longitude
+ * @param {number} [rangeMeters]
+ */
+export function flyToUserLocation(viewer, latitude, longitude, rangeMeters = 1500) {
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(longitude, latitude, rangeMeters),
+    orientation: {
+      heading: Cesium.Math.toRadians(0),
+      pitch: Cesium.Math.toRadians(-45),
+      roll: 0.0,
+    },
+    duration: 2.5,
+    easingFunction: Cesium.EasingFunction.CUBIC_IN_OUT,
+  });
+}
+/**
  * Set camera to Austin on load with a cinematic fly-in.
  */
 export function flyToAustin(viewer) {

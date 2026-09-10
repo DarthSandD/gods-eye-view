@@ -15,6 +15,8 @@ import {
 import { LOCATIONS, CITY_POIS, GLOBE_VIEW, flyToGlobeView, flyToPresetLocation, flyToPOI, searchAndFlyTo } from './locations.js';
 import { locationMiniStatus } from './locationStatus.js';
 import { interruptCameraMotion } from './cameraVerbs.js';
+import { flyToUserLocation } from './camera.js';
+import { isGeolocationAvailable, requestFirstFix } from './locate.js';
 import {
   aircraftTrackingTarget,
   enterCockpitWithTracking,
@@ -488,7 +490,7 @@ const SHARPEN_SHADER = /* glsl */ `
 `;
 
 /**
- * Central UI orchestrator for the God's Eye View application.
+ * Central UI orchestrator for the Omni Eyes View application.
  *
  * Responsibilities:
  * - CesiumJS PostProcessStage pipeline: registers per-style GLSL stages
@@ -2368,6 +2370,7 @@ export class StyleManager {
     this._toast = document.getElementById('toast');
     this._locationSearch = document.getElementById('location-search');
     this._searchToggle = document.getElementById('search-toggle');
+    this._locateBtn = document.getElementById('locate-btn');
     this._locationPills = document.getElementById('location-pills');
     this._poiRow = document.getElementById('poi-row');
     this._locationBarDivider = document.getElementById('location-bar-divider');
@@ -9288,6 +9291,12 @@ export class StyleManager {
     };
     document.addEventListener('keydown', this._poiKeydownHandler);
 
+    // Opt-in locate button (dock bottom-sheet). The browser permission prompt
+    // appears ONLY from this explicit tap — never on load. On grant the
+    // camera flies to the first fix; deny/timeout shows a toast and the map
+    // stays on the default view.
+    this._locateBtn?.addEventListener('click', () => this._onLocateClick());
+
     // Search toggle (expand/collapse)
     this._searchToggle.addEventListener('click', () => {
       this._locationSearch.classList.toggle('expanded');
@@ -9774,6 +9783,38 @@ export class StyleManager {
       const success = await this.shareLinkManager.copyLink();
       this._showToast(success ? 'Link copied!' : 'Copy failed');
     });
+  }
+
+  /**
+   * Explicit locate tap: one geolocation fix, then fly the camera to it.
+   * Deny/timeout/unavailable leaves the default view untouched and toasts.
+   * @returns {Promise<void>}
+   */
+  async _onLocateClick() {
+    if (this._locating) return;
+    if (!isGeolocationAvailable()) {
+      this._showToast('Location unavailable on this device');
+      return;
+    }
+    this._locating = true;
+    this._locateBtn?.setAttribute('aria-busy', 'true');
+    try {
+      const fix = await requestFirstFix();
+      if (this._disposed) return;
+      const generation = this._beginDeferredNavigation('location');
+      if (generation === false) return;
+      flyToUserLocation(this.viewer, fix.latitude, fix.longitude);
+      this._searchedLocationLabel = 'My location';
+      this._setActiveLocation(null);
+      this._currentPoi = null;
+      this._collapsePOIRow();
+      this._updateLocationMiniStatus();
+    } catch {
+      if (!this._disposed) this._showToast('Could not get your location');
+    } finally {
+      this._locating = false;
+      this._locateBtn?.removeAttribute('aria-busy');
+    }
   }
 
   /**

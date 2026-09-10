@@ -4,6 +4,8 @@
 // would spend optional API quotas, surprise returning operators, and fight share
 // links. A new visitor instead gets one compact, explicit choice after startup.
 //
+
+import { isNarrowViewport } from './mobile.js';
 // SHOW POLICY (owner ruling, 2026-08-23). The launcher is NOT one-shot. A new
 // operator needs the map explained more than once, so it returns every fresh
 // browser session until they say otherwise:
@@ -322,6 +324,26 @@ export function initFirstRunExperience({
   const root = documentRef?.getElementById?.('first-run-launcher');
   if (!root || root.dataset.initialized === 'true') return null;
   root.dataset.initialized = 'true';
+
+  // Small screens skip the first-run popup on first presentation: the dialog
+  // would cover the just-loaded default view on a phone, where the dock
+  // locate CTA is the more useful first step. This writes the SESSION
+  // dismissal (not the durable one), so the launcher simply joins the normal
+  // rotation from the next session — the suppression lasts only until it has
+  // been dismissed once. `?welcome=1` still forces a show for support demos.
+  try {
+    const params = new URLSearchParams(location?.search || '');
+    if (isNarrowViewport()
+      && params.get('welcome') !== '1'
+      && readStored('session', sessionStorageRef, FIRST_RUN_SESSION_KEY) !== 'dismissed'
+      && readStored('local', storage, FIRST_RUN_STORAGE_KEY) !== 'suppressed') {
+      rememberFirstRunSessionDismissed(sessionStorageRef);
+      root.remove();
+      return null;
+    }
+  } catch {
+    // Viewport/storage probing must never break the launcher; fall through.
+  }
 
   if (!shouldShowFirstRun({
     hasShareState: styleManager?.hasShareState,
