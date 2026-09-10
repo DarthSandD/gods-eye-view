@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🌐 God's Eye View
+![Omni Eyes View — live Earth intelligence on a photorealistic 3D globe](docs/media/omni-eyes-hero.png)
+
+# 🌐 Omni Eyes View
 
 ### A spy-satellite simulator in your browser — then you realize the sources are public and the data is real.
 
