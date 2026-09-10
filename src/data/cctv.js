@@ -1506,6 +1506,10 @@ function refreshProjectionTextures(record) {
  * @returns {string} Frame URL.
  */
 function frameUrlFor(camera, refreshMs = ACTIVE_FRAME_REFRESH_MS) {
+  // Feedless markers (seeds with no configured source URL) have no frame to
+  // fetch — return null so every consumer shows a steady placeholder instead
+  // of hammering a dead endpoint on a retry loop (the focus-plane flicker).
+  if (!camera?.feedConfigured) return null;
   const cadenceMs = Math.max(1000, safeNumber(refreshMs, ACTIVE_FRAME_REFRESH_MS));
   const tick = Math.floor(Date.now() / cadenceMs);
   const params = new URLSearchParams({
@@ -1843,6 +1847,8 @@ function refreshProjectionImage(record, force = false) {
   // can remain permanently pending. The proxy bounds each attempt; load/error
   // clears this latch so the next normal tick can refresh.
   if (runtime.imageLoading) return;
+  // Feedless markers keep their painted placeholder — no fetch, no flicker.
+  if (!record.camera?.feedConfigured) return;
   const now = Date.now();
   const refreshMs = record.camera.id === _activeCameraId
     ? PROJECTION_ACTIVE_REFRESH_MS
@@ -3112,6 +3118,8 @@ function cardFrameTick() {
  *   stamps `_cardLastFetchAt`, so the pacer waits a full interval after it.
  */
 function fetchCardFrame(record, slot, refreshMs, { userGesture = false } = {}) {
+  // Feedless markers have no frame to fetch — cards stay icon-only by design.
+  if (!record?.camera?.feedConfigured) return;
   if (typeof document !== 'undefined' && document.hidden && !userGesture) return;
   const now = Date.now();
   const cameraId = record.camera.id;
