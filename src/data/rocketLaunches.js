@@ -11,6 +11,7 @@ import {
   setOverlaySourceVisible,
 } from '../overlays/worldOverlay.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
+import { celestrakDirectUrl, fetchWithProxyFallback, launchLibraryDirectUrl } from './staticDirect.js';
 
 const WINDOW_DAYS = 30;
 const API_URL = '/api/launches';
@@ -3255,8 +3256,10 @@ function schedulePostTleRetry(token) {
 function ensureActiveTleLookup(token) {
   if (_activeTleText) return Promise.resolve(_activeTleText);
   if (_activeTlePromise && _activeTlePromiseToken === token) return _activeTlePromise;
-  const request = fetch('/api/celestrak/active')
-    .then((activeResponse) => {
+  // Static hosting: the bulk `active` group may 403/CORS-fail direct — the
+  // existing degrade path (null TLE text, mission update still renders) holds.
+  const request = fetchWithProxyFallback('/api/celestrak/active', [celestrakDirectUrl('active')])
+    .then(({ response: activeResponse }) => {
       if (!activeResponse.ok) throw new Error(`HTTP ${activeResponse.status}`);
       return activeResponse.text();
     })
@@ -3342,7 +3345,8 @@ async function restoreSatelliteDependency() {
 async function performMissionUpdate(token) {
   try {
     ensureActiveTleLookup(token);
-    const response = await fetch(API_URL);
+    // Static hosting: Launch Library 2 is keyless — fetch direct on proxy 404.
+    const { response } = await fetchWithProxyFallback(API_URL, [launchLibraryDirectUrl(WINDOW_DAYS, 100)]);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const launches = normalizeRocketLaunches(await response.json());
     if (!_enabled || token !== _lifecycleToken || !_dataSource) return;

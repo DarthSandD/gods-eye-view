@@ -20,6 +20,7 @@ import { warmFireAnchorFloors } from './fireAnchors.js';
 import { normalizeMilitaryInstallations } from './militaryInstallationData.js';
 import { installationFeedback } from './installationFeedback.js';
 import { registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
+import { fetchMilitaryInstallationsDirect, isProxyMissing } from './staticDirect.js';
 
 const LAYER_ID = 'military-installations';
 const REQUEST_DEBOUNCE_MS = 500;
@@ -444,12 +445,25 @@ async function loadInstallations() {
     const fetchInstallations = async (exact) => {
       const query = new URLSearchParams(Object.entries(box).map(([key, value]) => [key, value.toFixed(5)]));
       if (exact) query.set('exact', '1');
-      const response = await fetch(`/api/military-installations?${query}`, { signal: requestAbort.signal });
-      const body = await response.json();
-      if (!response.ok) throw Object.assign(new Error(body?.error || `Installation feed HTTP ${response.status}`), {
-        failureReason: ['rate_limited', 'timeout', 'query_failed'].includes(body?.reason) ? body.reason : 'unavailable',
-      });
-      return body;
+      let proxyStatus = null;
+      try {
+        const response = await fetch(`/api/military-installations?${query}`, { signal: requestAbort.signal });
+        proxyStatus = response.status;
+        const body = await response.json();
+        if (!response.ok) throw Object.assign(new Error(body?.error || `Installation feed HTTP ${response.status}`), {
+          failureReason: ['rate_limited', 'timeout', 'query_failed'].includes(body?.reason) ? body.reason : 'unavailable',
+        });
+        return body;
+      } catch (proxyError) {
+        if (requestAbort.signal.aborted) throw proxyError;
+        // A live proxy's own refusal (rate limit, timeout) keeps its backoff
+        // semantics — only an absent proxy fails over to direct Overpass.
+        if (proxyStatus !== null && !isProxyMissing({ status: proxyStatus })) throw proxyError;
+        // Static hosting (GitHub Pages): the proxy 404s — query Overpass
+        // directly with the same QL and proxy-shaped payload. Google
+        // enrichment below stays key-gated and is skipped without a proxy.
+        return fetchMilitaryInstallationsDirect(box, { signal: requestAbort.signal });
+      }
     };
 
     let payload = await fetchInstallations(false);

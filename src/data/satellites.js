@@ -32,6 +32,7 @@ import {
 } from './contextStore.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
 import { isExplicitLayerStateOrigin } from './layerState.js';
+import { celestrakDirectUrl, fetchWithProxyFallback } from './staticDirect.js';
 
 /**
  * Satellite Orbits — Real-time positions via CelesTrak TLE + SGP4 propagation.
@@ -1093,7 +1094,13 @@ async function _loadDenseCatalog({ signal = null } = {}) {
   _notifyRowControls();
   try {
     loadSignal.throwIfAborted();
-    const res = await fetch(`/api/celestrak/${DENSE_GROUP_PATH}`, { signal: loadSignal });
+    // Static hosting: CelesTrak group direct (per-group degrade preserved;
+    // bulk groups may 403/CORS-fail — degrade, retry, keep stale).
+    const { response: res } = await fetchWithProxyFallback(
+      `/api/celestrak/${DENSE_GROUP_PATH}`,
+      [celestrakDirectUrl(DENSE_GROUP_PATH)],
+      { signal: loadSignal },
+    );
     if (!res.ok) {
       console.warn(`[Data:Satellites] Dense group '${DENSE_GROUP_PATH}' fetch failed (${res.status})`);
       _denseLoadFailed(token, `feed unavailable (${res.status})`);
@@ -1632,7 +1639,13 @@ const satellitesLayer = {
       // gracefully (parseTLE of an upstream error body yields []).
       const results = await Promise.all(CATALOG_GROUPS.map(async (groupDef) => {
         try {
-          const res = await fetch(`/api/celestrak/${groupDef.path}`, { signal: updateSignal });
+          // Static hosting: per-group direct fallback; a failed group degrades
+          // gracefully while the rest of the catalog still loads.
+          const { response: res } = await fetchWithProxyFallback(
+            `/api/celestrak/${groupDef.path}`,
+            [celestrakDirectUrl(groupDef.path)],
+            { signal: updateSignal },
+          );
           if (!res.ok) return { ...groupDef, entries: [], ok: false };
           const entries = parseTLE(await res.text());
           updateSignal.throwIfAborted();

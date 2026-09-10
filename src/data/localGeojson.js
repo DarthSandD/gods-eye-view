@@ -1,5 +1,6 @@
 import * as Cesium from 'cesium';
 import { governorRequestRender } from '../renderGovernor.js';
+import { yieldForNonCriticalGeojsonl } from '../mobile.js';
 import {
   clearSelectedEntityContextForLayer,
   registerEntityContext,
@@ -421,6 +422,10 @@ export function createLocalGeoJsonLayer({
         // windows (before vs after the add settles) need different cleanup.
         let addedToScene = false;
         try {
+          // Mobile: defer the non-critical geojsonl fetch+parse to an idle
+          // moment so enabling a local layer never blocks first paint.
+          // Disable-during-wait is honored by the _enabled check below.
+          await yieldForNonCriticalGeojsonl();
           const response = await fetch(url);
           // A 404 returns an HTML body that would otherwise die in JSON.parse
           // one line later, reported as a parse error for a missing file.

@@ -94,6 +94,11 @@ import {
 } from './contextStore.js';
 import { CONTACT_MATCH_TIER, contactMatchWins, rankContactMatch } from './contactMatch.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
+import {
+  fetchWithProxyFallback,
+  openskyDirectUrlFromProxyUrl,
+  openskyTrackDirectUrl,
+} from './staticDirect.js';
 
 const FOCUS_EVIDENCE_DEV = import.meta.env?.DEV === true;
 
@@ -3041,9 +3046,13 @@ function _startTrail(icao24) {
 async function _backfillTrail(icao24, token, oldestFixEpochSec) {
   let path = null;
   try {
-    const response = await fetch('/api/opensky-track?icao24=' + encodeURIComponent(icao24), {
-      signal: AbortSignal.timeout(8000),
-    });
+    // Static hosting (GitHub Pages): the same-origin proxy 404s, so fall back
+    // to the anonymous OpenSky track endpoint (identical {path} shape).
+    const { response } = await fetchWithProxyFallback(
+      '/api/opensky-track?icao24=' + encodeURIComponent(icao24),
+      [openskyTrackDirectUrl(icao24)],
+      { signal: AbortSignal.timeout(8000) },
+    );
     if (!response.ok) return;
     const data = await response.json();
     path = Array.isArray(data?.path) ? data.path : null;
@@ -4076,7 +4085,15 @@ const flightsLayer = {
       : resourceController.signal;
     try {
       updateSignal.throwIfAborted();
-      const response = await fetch(_flightApiUrl(viewer || _viewer), { signal: updateSignal });
+      // Static hosting (GitHub Pages): the same-origin proxy 404s, so fall
+      // back to the anonymous OpenSky bbox snapshot around the view anchor.
+      const proxyUrl = _flightApiUrl(viewer || _viewer);
+      const { response, source: fetchSource } = await fetchWithProxyFallback(
+        proxyUrl,
+        [openskyDirectUrlFromProxyUrl(proxyUrl)],
+        { signal: updateSignal },
+      );
+      const directFetch = fetchSource !== 'proxy';
       _lastStatus = response.status;
       const responseSource = response.headers.get('x-flight-source');
       const responseCoverage = response.headers.get('x-flight-coverage');
@@ -4158,8 +4175,8 @@ const flightsLayer = {
       _lastError = sourceStale
         ? `Source snapshot ${Math.max(2, Math.round(sourceAgeMs / 60_000))} min old`
         : null;
-      _lastSource = responseSource || 'OpenSky Network';
-      _lastCoverage = responseCoverage || 'worldwide upstream snapshot';
+      _lastSource = responseSource || (directFetch ? 'OpenSky Network (direct)' : 'OpenSky Network');
+      _lastCoverage = responseCoverage || (directFetch ? 'regional bbox (static fallback)' : 'worldwide upstream snapshot');
       const currentIcaos = new Set();
       const acceptedSnapshotIcaos = new Set();
       const now = Cesium.JulianDate.now();

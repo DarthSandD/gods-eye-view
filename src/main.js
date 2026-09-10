@@ -31,6 +31,11 @@ import {
   releaseContinuousRender,
 } from './renderGovernor.js';
 import { installScopeMask } from './scopeMask.js';
+import {
+  COARSE_TILE_MAXIMUM_SCREEN_SPACE_ERROR,
+  isCoarsePointer,
+  mobileViewerProfile,
+} from './mobile.js';
 import { initFirstRunExperience } from './firstRunExperience.js';
 import { initKeySetup } from './keySetup.js';
 import { loadPhotorealisticTileset } from './mapStartup.js';
@@ -81,6 +86,11 @@ async function init() {
     const googleApiKey = import.meta.env.GOOGLE_MAPS_API_KEY;
     if (googleApiKey) window.__GOOGLE_MAPS_API_KEY__ = googleApiKey;
 
+    // Mobile render profile (src/mobile.js): desktop values below are today's
+    // exact numbers (pixel-identical); small-screen / coarse-pointer devices
+    // get MSAA 1, a 30 fps target, a capped resolution scale, and no preserved
+    // drawing buffer outside recording mode.
+    const renderProfile = mobileViewerProfile();
     // Create the Cesium viewer with minimal chrome
     const viewer = new Cesium.Viewer('cesiumContainer', {
       timeline: false,
@@ -108,10 +118,10 @@ async function init() {
         document.body.appendChild(el);
         return el;
       })(),
-      msaaSamples: 4,
+      msaaSamples: renderProfile.msaaSamples,
       contextOptions: {
         webgl: {
-          preserveDrawingBuffer: true,
+          preserveDrawingBuffer: renderProfile.preserveDrawingBuffer,
         },
       },
     });
@@ -123,7 +133,14 @@ async function init() {
     // designed against wall-clock time, not frame count. Measured on the
     // 2026-08-05 perf investigation as a strict halving of idle burn on
     // 120 Hz hardware; a no-op on 60 Hz displays. (perf item 2)
-    viewer.targetFrameRate = 60;
+    // Mobile profile targets 30 fps instead (half the frame cost on thermals).
+    viewer.targetFrameRate = renderProfile.targetFrameRate;
+    if (Number.isFinite(renderProfile.resolutionScaleCap)) {
+      viewer.resolutionScale = Math.min(
+        viewer.resolutionScale || 1,
+        renderProfile.resolutionScaleCap,
+      );
+    }
 
     // Register per-layer data attribution into the "Data attribution" popover.
     // Required by each source's license (ODbL, CC BY-NC-SA, NASA FIRMS, etc.);
@@ -155,6 +172,11 @@ async function init() {
     const tileset = photoreal.tileset;
     if (tileset) {
       viewer.scene.primitives.add(tileset);
+      // Coarse-pointer tile budget: halve photoreal tile load on touch devices
+      // (desktop keeps the default SSE 16, pixel-identical).
+      if (isCoarsePointer()) {
+        tileset.maximumScreenSpaceError = COARSE_TILE_MAXIMUM_SCREEN_SPACE_ERROR;
+      }
       // NOTE: Cesium World Terrain intentionally disabled — conflicts with Google 3D Tiles at high zoom.
       // Google Photorealistic 3D Tiles provide their own terrain/elevation.
       viewer.scene.globe.show = false;

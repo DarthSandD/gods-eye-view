@@ -13,6 +13,8 @@
  *    military aircraft are still classified and styled amber.
  */
 
+import { ADSB_LOL_MIL_DIRECT, fetchWithProxyFallback } from './staticDirect.js';
+
 const MIL_POLL_INTERVAL_MS = 60000;
 
 /** @type {Set<string>} Lowercase ICAO24 hexes known to be military. */
@@ -105,7 +107,8 @@ export function refreshMilitaryRegistryIfStale() {
   _polling = true;
   (async () => {
     try {
-      const response = await fetch('/api/adsblol/mil', { signal: AbortSignal.timeout(10000) });
+      // Static hosting: fall back to the keyless adsb.lol feed direct.
+      const { response } = await fetchWithProxyFallback('/api/adsblol/mil', [ADSB_LOL_MIL_DIRECT], { signal: AbortSignal.timeout(10000) });
       if (!response.ok) return;
       const data = await response.json();
       const aircraft = Array.isArray(data?.ac) ? data.ac : [];

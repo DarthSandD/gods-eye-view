@@ -19,6 +19,7 @@ import {
   setOverlayEntries,
   setOverlaySourceVisible,
 } from '../overlays/worldOverlay.js';
+import { fetchWithProxyFallback } from './staticDirect.js';
 
 export const BIKESHARE_SELECTED_OVERLAY_SOURCE_ID = 'bikeshare-selected';
 export const BIKESHARE_SELECTED_OVERLAY_SOURCE_OPTIONS = Object.freeze({
@@ -773,7 +774,9 @@ function parseStationStatus(payload) {
  * @throws {Error} On non-OK HTTP status or malformed JSON.
  */
 async function fetchGbfsJson(upstreamUrl, { signal } = {}) {
-  const response = await fetch(toProxyUrl(upstreamUrl), {
+  // Static hosting: the /api/gbfs proxy 404s — fetch the feed directly.
+  // Feeds without CORS headers fail per-feed and degrade (existing catch).
+  const { response } = await fetchWithProxyFallback(toProxyUrl(upstreamUrl), [upstreamUrl], {
     method: 'GET',
     headers: { Accept: 'application/json' },
     signal,
