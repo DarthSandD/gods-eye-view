@@ -1,5 +1,4 @@
 // Embedded browser-native voice agent — pure-logic + stubbed-browser tests.
-// No DOM, no microphone, no network (asserted: fetch is undefined here).
 //
 // Run with: node --test src/voice/embeddedAgent.test.mjs
 import { test } from 'node:test';
@@ -18,6 +17,7 @@ import {
   speakEmbeddedReply,
   suggestClosestCommand,
 } from './embeddedAgent.js';
+import { GevRealtimeController } from './gevRealtime.js';
 
 test('the agent module performs no network calls (static guard)', async () => {
   const { readFileSync } = await import('node:fs');
@@ -282,4 +282,120 @@ test('continuous toggle and push-to-talk reuse the shared mic guards', () => {
   assert.equal(started, 0);
   assert.doesNotThrow(detach);
   agent.stop();
+});
+
+// ---- GevRealtimeController wiring tests (stubbed recognition/synthesis/runner) ----
+
+function stubSynthesisForWiring() {
+  const spoken = [];
+  const handle = {
+    speak(u) { spoken.push(u); },
+    cancel() { spoken.length = 0; },
+    Utterance: function (text) { this.text = text; },
+  };
+  return { spoken, handle };
+}
+
+function stubRecognitionCtorForWiring() {
+  function FakeRecognition() {
+    FakeRecognition.instances.push(this);
+    this.lang = 'en-US';
+    this.interimResults = false;
+    this.maxAlternatives = 1;
+    this.continuous = false;
+    this.started = false;
+    this.onresult = null;
+    this.onerror = null;
+    this.onend = null;
+  }
+  FakeRecognition.instances = [];
+  FakeRecognition.prototype.start = function () { this.started = true; };
+  FakeRecognition.prototype.stop = function () { this.started = false; };
+  FakeRecognition.prototype.abort = function () { this.started = false; };
+  return FakeRecognition;
+}
+
+function wiringUiMock() {
+  return {
+    root: {
+      dataset: {},
+      classList: { remove() {}, add() {} },
+      querySelectorAll: () => [],
+    },
+    button: { addEventListener: () => {}, removeEventListener: () => {} },
+    buttonLabel: { textContent: '' },
+    status: { textContent: '' },
+    detail: { textContent: '', title: '' },
+    helpDetail: { textContent: '' },
+    errorDetail: { textContent: '' },
+    tierButton: null,
+    costValue: { textContent: '', dataset: {} },
+  };
+}
+
+test('wiring prefers embedded voice on mic click when no Realtime route is live', async () => {
+  const { spoken } = stubSynthesisForWiring();
+  let runnerCalls = 0;
+  const controller = new GevRealtimeController({
+    runner: async () => { runnerCalls++; return { ok: true, label: 'Austin' }; },
+    ui: wiringUiMock(),
+  });
+  controller.debugLog = () => {};
+
+  // No API base → realtimeRouteLive is false → mic click launches embedded voice.
+  const launched = controller.launchEmbeddedVoice();
+  assert.equal(launched, true, 'launchEmbeddedVoice returns true when supported');
+  assert.ok(controller.embeddedAgent, 'embedded agent is retained on the controller');
+  assert.equal(runnerCalls, 0, 'launching embedded voice does not call the Realtime runner');
+
+  // Route one transcript through the embedded recognition path (stubbed ctor).
+  const wire2 = stubSynthesisForWiring();
+  controller.embeddedAgent.synthesis = wire2.handle;
+  controller.embeddedAgent.recognitionCtor = stubRecognitionCtorForWiring();
+  controller.embeddedAgent.active = true;
+  await controller.embeddedAgent.handleTranscript('fly to Austin');
+  assert.equal(runnerCalls, 1, 'transcript routes through createEmbeddedVoiceAgent → parseEmbeddedVoiceCommand → runner');
+  assert.ok(wire2.spoken.some((s) => (typeof s === 'string' ? s : s?.text || '').includes('Austin')), `spoken: ${JSON.stringify(wire2.spoken)}`);
+  controller.stop();
+});
+
+test('wiring keeps Realtime path available when API base is configured', () => {
+  const controller = new GevRealtimeController({
+    runner: async () => ({ ok: true }),
+    ui: wiringUiMock(),
+  });
+  controller.debugLog = () => {};
+
+  // Force the Realtime route to appear live for this test.
+  controller.realtimeRouteLive = () => true;
+
+  // When the Realtime route is live, launchEmbeddedVoice still works (it is the
+  // free path), but the Realtime start() is no longer gated out — so the mic button
+  // handler would proceed to controller.start() after the embedded path is offered.
+  const launched = controller.launchEmbeddedVoice();
+  assert.equal(launched, true, 'embedded voice is still offered when Realtime route is live');
+  assert.ok(controller.embeddedAgent, 'embedded agent created even when Realtime route is live');
+  controller.stop();
+});
+
+test('stop tears down embedded voice so the mic is not left live', async () => {
+  const controller = new GevRealtimeController({
+    runner: async () => ({ ok: true }),
+    ui: wiringUiMock(),
+  });
+  controller.debugLog = () => {};
+
+  const launched = controller.launchEmbeddedVoice();
+  assert.equal(launched, true);
+  assert.ok(controller.embeddedAgent);
+
+  // Start the embedded agent so it owns the mic (stubbed ctor).
+  controller.embeddedAgent.recognitionCtor = stubRecognitionCtorForWiring();
+  controller.embeddedAgent.start();
+  assert.equal(controller.embeddedAgent.active, true);
+
+  // stop() must tear down the embedded agent.
+  controller.stop();
+  assert.equal(controller.embeddedAgent, null, 'embedded agent cleared by stop()');
+  assert.equal(controller.status, 'idle', 'controller returns to idle after embedded stop');
 });

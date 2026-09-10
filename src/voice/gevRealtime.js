@@ -9,6 +9,12 @@ import {
   resolveVoiceModel,
   serializeCostLimits,
 } from './voiceCost.js';
+import { resolveApiBase } from '../data/staticDirect.js';
+import {
+  createEmbeddedVoiceAgent,
+  EMBEDDED_VOICE_UNSUPPORTED_REPLY,
+  speakEmbeddedReply,
+} from './embeddedAgent.js';
 
 const TOKEN_URL = '/api/realtime/token';
 const REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
@@ -211,8 +217,18 @@ export function initGevVoiceCommands({ viewer, styleManager, dataManager, sceneD
   }
   controller.buttonHandler = () => {
     if (shouldIgnoreVoiceButtonClick(controller.spaceKeyHeld)) return;
-    if (controller.isActive()) controller.stop();
-    else controller.start({ pushToTalk: false });
+    if (controller.isActive()) {
+      controller.stop();
+    } else {
+      // Prefer the free embedded (browser-native) voice path when it is
+      // supported. The OpenAI Realtime path is only engaged when a worker API
+      // base + token route is live; otherwise the mic button is silent-degraded
+      // to the embedded agent (which is why the error tray never fires below).
+      if (controller.launchEmbeddedVoice()) {
+        return;
+      }
+      controller.start({ pushToTalk: false });
+    }
   };
   ui.button.addEventListener('click', controller.buttonHandler);
   if (ui.tierButton) {
@@ -316,6 +332,10 @@ export class GevRealtimeController {
     // /api/realtime/token backend). Null unless the fallback is active.
     this.localRecognition = null;
     this.localVoiceActive = false;
+    // Embedded (browser-native, zero-network) voice agent — prefers the mic
+    // button and push-to-talk when supported, so the OpenAI Realtime path is
+    // only engaged when a worker API base + token route is live.
+    this.embeddedAgent = null;
     // Monotonic generation token. Every start()/stop() bumps it; an in-flight
     // start() captures its value and bails after each await if it no longer
     // matches, so a stop() (or a second start()) mid-connect cannot leave an
@@ -348,6 +368,16 @@ export class GevRealtimeController {
     this.spaceKeyHeld = spaceKeyHeld;
     if (!window.RTCPeerConnection || !navigator.mediaDevices?.getUserMedia) {
       this.setStatus('error', 'WebRTC microphone support unavailable');
+      return;
+    }
+
+    // Embedded (browser-native, zero-network) voice is the free path and owns
+    // the mic button / PTT when supported. Only engage the OpenAI Realtime path
+    // when a worker API base + token route is actually live — otherwise the mic
+    // button silent-degraded into the embedded agent above, so we must never
+    // surface VOICE SYSTEM ERROR here while that path is available.
+    if (!this.realtimeRouteLive()) {
+      this.setStatus('idle', 'Voice standby — no Realtime route');
       return;
     }
 
@@ -920,11 +950,79 @@ export class GevRealtimeController {
     if (removeUi && this.ui?.root) {
       this.ui.root.remove();
     }
+    // Tear down the embedded (browser-native) voice agent so stop() is the
+    // single teardown path for both voice transports — Realtime and embedded.
+    this.stopEmbeddedVoice();
     if (!preserveStatus && !removeUi) {
       this.setStatus('idle', 'Voice off');
     }
     this.setRadioVoiceDucking(false);
   }
+
+  /**
+   * Launch the free embedded (browser-native, zero-network) voice agent as the
+   * preferred mic path. Returns true when the mic button is now owned by the
+   * embedded agent — the Realtime path stays idle until a worker API base + token
+   * route is live.
+   *
+   * The agent reuses the same shared mic UX guards the Realtime controller does:
+   * shouldIgnoreVoiceButtonClick (Space-click race), isPushToTalkKey /
+   * shouldHandlePushToTalkKeyDown (PTT), so the global hold-Space shortcut works
+   * identically on both transports.
+   *
+   * Transcripts route through createEmbeddedVoiceAgent / parseEmbeddedVoiceCommand
+   * into the same gev action runner the Realtime path calls, and spoken replies go
+   * through speakEmbeddedReply so failures stay honest.
+   * @returns {boolean} true when the embedded agent is now the active voice path
+   */
+  launchEmbeddedVoice() {
+    if (this.embeddedAgent && this.embeddedAgent.isSupported()) {
+      this.embeddedAgent.stop();
+    }
+    const agent = createEmbeddedVoiceAgent({
+      runner: this.runner,
+      // Scene titles feed the "play <scene>" matcher; the agent falls back to
+      // static sceneNames when getSceneNames is absent.
+      getSceneNames: this.dataManager?.sceneDirector?.listScenes?.bind(
+        this.dataManager?.sceneDirector
+      ) || null,
+      sceneNames: this.dataManager?.sceneDirector?.listScenes?.() || [],
+      recognitionCtor: getLocalSpeechRecognitionCtor(),
+      synthesis: undefined,
+      geolocation: undefined,
+      onStatus: (st) => this.setStatus(st.state, st.detail),
+    });
+    if (!agent) return false;
+    this.embeddedAgent = agent;
+    this.setStatus('idle', 'Embedded voice ready — say "help"');
+    return true;
+  }
+
+  /**
+   * Stop the embedded voice agent if it owns the mic. Idempotent — safe to call
+   * from stop() even when only the Realtime path was active.
+   */
+  stopEmbeddedVoice() {
+    const agent = this.embeddedAgent;
+    this.embeddedAgent = null;
+    if (!agent || typeof agent.stop !== 'function') return;
+    try {
+      agent.stop();
+    } catch { /* teardown must not throw */ }
+  }
+
+  /**
+   * Is there a worker API base + token route live for the OpenAI Realtime path?
+   * When this is false the mic button is silent-degraded into the embedded agent
+   * above, so start() must not surface VOICE SYSTEM ERROR.
+   */
+  realtimeRouteLive() {
+    const apiBase = resolveApiBase();
+    if (!apiBase) return false;
+    return true;
+  }
+
+  /** Used by tests to force the Realtime route (or its absence) without a worker. */
 
   /**
    * Start the keyless on-device speech-recognition fallback after the
