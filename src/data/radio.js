@@ -32,6 +32,11 @@ import {
   projectEarthDiscToViewport,
 } from '../celestialRing.js';
 import { governorRequestRender } from '../renderGovernor.js';
+import {
+  RADIO_FALLBACK_MIRRORS,
+  fetchRadioDirectoryDirect,
+  isProxyMissing,
+} from './staticDirect.js';
 
 const RADIO_PREFIX = 'radio:';
 const DIRECTORY_ENDPOINT = '/api/radio/stations';
@@ -1761,6 +1766,8 @@ function tryRadioFallback(
 
 function recordDirectoryClick(id) {
   fetch(`/api/radio/click/${encodeURIComponent(id)}`, { method: 'POST' }).catch(() => {});
+  // Static hosting: no broker — count the click directly against a mirror (best-effort).
+  fetch(`${RADIO_FALLBACK_MIRRORS[0]}/json/url/${encodeURIComponent(id)}`).catch(() => {});
 }
 
 /** Play the selected broadcaster stream after an explicit user action. */
@@ -2666,9 +2673,23 @@ export const radioLayer = {
     _error = null;
     emitState();
     try {
-      const response = await fetch(DIRECTORY_ENDPOINT, { signal: _abortController.signal });
-      if (!response.ok) throw new Error(`Radio directory returned ${response.status}`);
-      const body = await response.json();
+      let body;
+      let proxyStatus = null;
+      try {
+        const response = await fetch(DIRECTORY_ENDPOINT, { signal: _abortController.signal });
+        proxyStatus = response.status;
+        if (!response.ok) throw new Error(`Radio directory returned ${response.status}`);
+        body = await response.json();
+      } catch (proxyError) {
+        if (_abortController.signal.aborted) throw proxyError;
+        // A live broker's own refusal (rate limit, upstream 5xx) is respected
+        // exactly as before — only an absent broker fails over to mirrors.
+        if (proxyStatus !== null && !isProxyMissing({ status: proxyStatus })) throw proxyError;
+        // Static hosting (GitHub Pages): the broker 404s — discover Radio
+        // Browser mirrors client-side and query them directly. The direct body
+        // is shaped like the broker response, so validation below holds.
+        body = await fetchRadioDirectoryDirect({ signal: _abortController.signal });
+      }
       if (!radioRequestIsCurrent(
         generation,
         _requestGeneration,

@@ -1,5 +1,6 @@
 import * as Cesium from 'cesium';
 import { viewportBias, placesNearViewRecovery } from './annotations/annotationResolver.js';
+import { fetchWithProxyFallback, OVERPASS_DIRECT_MIRRORS } from './data/staticDirect.js';
 
 /**
  * Points of Interest per city.
@@ -971,12 +972,17 @@ async function resolveBuildingBounds(lat, lon, query) {
   const controller = new AbortController();
   const timeout = window.setTimeout(() => controller.abort(), 6000);
   try {
-    const response = await fetch('/api/overpass', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `data=${encodeURIComponent(overpassQuery)}`,
-      signal: controller.signal,
-    });
+    // Static hosting: proxy first, then public Overpass mirrors direct.
+    const { response } = await fetchWithProxyFallback(
+      '/api/overpass',
+      [...OVERPASS_DIRECT_MIRRORS],
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `data=${encodeURIComponent(overpassQuery)}`,
+        signal: controller.signal,
+      },
+    );
     if (!response.ok) return null;
     const data = await response.json();
     return selectBuildingBounds(data?.elements || [], lat, lon, query);

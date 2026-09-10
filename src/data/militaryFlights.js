@@ -61,6 +61,7 @@ import {
 } from './contextStore.js';
 import { CONTACT_MATCH_TIER, contactMatchWins, rankContactMatch } from './contactMatch.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
+import { ADSB_LOL_MIL_DIRECT, adsbLolTraceDirectUrl, fetchWithProxyFallback } from './staticDirect.js';
 
 /**
  * @module militaryFlights
@@ -2197,9 +2198,13 @@ async function _backfillTrail(icao24, token, oldestFixEpochSec) {
   let baseEpochSec = null;
   let trace = null;
   try {
-    const response = await fetch('/api/adsblol/trace?hex=' + encodeURIComponent(icao24), {
-      signal: AbortSignal.timeout(8000),
-    });
+    // Static hosting: the proxy passthrough is byte-identical to this direct
+    // readsb trace URL, so fall back to it when /api/* 404s.
+    const { response } = await fetchWithProxyFallback(
+      '/api/adsblol/trace?hex=' + encodeURIComponent(icao24),
+      [adsbLolTraceDirectUrl(icao24)],
+      { signal: AbortSignal.timeout(8000) },
+    );
     if (!response.ok) return;
     const data = await response.json();
     baseEpochSec = Number(data?.timestamp);
@@ -2785,7 +2790,8 @@ const militaryFlightsLayer = {
       : resourceController.signal;
     try {
       updateSignal.throwIfAborted();
-      const response = await fetch(API_URL, { signal: updateSignal });
+      // Static hosting: fall back to the keyless adsb.lol military feed direct.
+      const { response } = await fetchWithProxyFallback(API_URL, [ADSB_LOL_MIL_DIRECT], { signal: updateSignal });
       _lastStatus = response.status;
 
       if (!response.ok) {

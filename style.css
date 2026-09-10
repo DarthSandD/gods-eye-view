@@ -9520,3 +9520,69 @@ body.scene-playback-mode #key-setup {
   border-color: rgba(255, 170, 150, 0.65);
   outline: none;
 }
+
+/* ═══════════════════════════════════════════════
+   MOBILE PASS (static + touch devices)
+   Desktop rendering is untouched — every rule below is gated behind a
+   small-viewport or coarse-pointer query.
+   ═══════════════════════════════════════════════ */
+
+/* Dock + panels can never overflow the viewport horizontally. */
+#command-dock {
+  width: min(94vw, 1240px, 100vw - 24px);
+}
+#control-panel {
+  max-width: min(680px, 100vw - 24px);
+}
+#data-panel {
+  width: min(var(--panel-expanded-width), 100vw - 24px);
+}
+#global-context-panel {
+  width: min(var(--panel-expanded-width), 100vw - 24px);
+}
+#right-context-rail {
+  width: min(330px, 100vw - 24px);
+}
+
+/* 44px minimum touch targets on touch-driven devices. */
+@media (pointer: coarse) {
+  #command-dock button,
+  #control-panel button,
+  #top-center-actions button,
+  #data-panel button,
+  #location-bar button,
+  #gev-voice-control button,
+  #global-context-panel button,
+  #right-context-rail button {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* 390px phones: the command dock becomes a bottom sheet instead of a centered
+   floating bar. NOTE: the credit-attribution pin (creditAttribution.test.mjs)
+   models #command-dock geometry exactly — only plain px/vh lengths here, no
+   env()/dvh/max-height, or the pin fails closed. */
+@media (max-width: 390px) {
+  #command-dock {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    transform: none;
+    width: auto;
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'locations'
+      'presets'
+      'voice';
+  }
+  #control-panel {
+    left: 12px;
+    right: 12px;
+    transform: none;
+    bottom: 12px;
+  }
+  #top-center-actions {
+    top: 12px;
+  }
+}

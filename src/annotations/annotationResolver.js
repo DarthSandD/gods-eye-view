@@ -3,6 +3,7 @@ import { lookupNeighborhoodRing } from '../data/neighborhoodPolygons.js';
 import { lookupNaturalRegionOutline, findNaturalRegion } from '../data/naturalEarthRegions.js';
 import { registerDynamicCredit, NATURAL_EARTH_CREDIT } from '../data/dataCredits.js';
 import { isPickedWorldPosition } from '../data/scenePick.js';
+import { fetchWithProxyFallback, OVERPASS_DIRECT_MIRRORS } from '../data/staticDirect.js';
 
 /**
  * Annotation target resolver.
@@ -817,12 +818,17 @@ async function overpassJson(query, timeoutMs = 14000, signal) {
   const detach = linkAbort(controller, signal);
   const timer = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch('/api/overpass', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `data=${encodeURIComponent(query)}`,
-      signal: controller.signal,
-    });
+    // Static hosting: proxy first, then public Overpass mirrors direct.
+    const { response: res } = await fetchWithProxyFallback(
+      '/api/overpass',
+      [...OVERPASS_DIRECT_MIRRORS],
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `data=${encodeURIComponent(query)}`,
+        signal: controller.signal,
+      },
+    );
     const retryAfter = res.headers?.get?.('Retry-After');
     if (res.status === 429 || (res.status === 503 && retryAfter != null)) {
       return { rateLimited: true, retryAfterMs: parseRetryAfterMs(retryAfter) };

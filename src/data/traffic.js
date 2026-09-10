@@ -13,6 +13,8 @@ import {
 import { queuePlatoons, locateAlongRoad } from './trafficQueue.js';
 import { registerDynamicCredit, TOMTOM_CREDIT } from './dataCredits.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
+import { OVERPASS_DIRECT_MIRRORS, fetchWithProxyFallback } from './staticDirect.js';
+import { DESKTOP_TRAFFIC_MAX_DOTS, trafficDotBudget } from '../mobile.js';
 
 /**
  * @file Street Traffic — animated dots along OSM road polylines, colored by
@@ -54,7 +56,11 @@ const DOT_HEIGHT_OFFSET = 3.0;
 /** @const {number} Fraction (0-1) — skip re-fetch when viewport overlap exceeds this */
 const OVERLAP_THRESHOLD = 0.6;
 /** @const {number} Hard cap on total rendered dot primitives for GPU/CPU performance */
-const MAX_DOTS = 6000;
+const MAX_DOTS = DESKTOP_TRAFFIC_MAX_DOTS;
+/** Coarse-pointer dot budget — resolved per device at load plan time. */
+function maxDotsForDevice() {
+  return trafficDotBudget();
+}
 /** @const {number} Polylines longer than this are simplified by sub-sampling */
 const MAX_WAYPOINTS_PER_ROAD = 80;
 /** @const {number} Km — minimum viewport center shift before allowing refresh */
@@ -490,12 +496,17 @@ async function fetchRoads(
       'last-camera-change-to-fetch-start', state, trace.cameraChangeMark, fetchStart,
     );
   }
-  const response = await fetch(OVERPASS_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: `data=${encodeURIComponent(query)}`,
-    signal,
-  });
+  // Static hosting: proxy first, then public Overpass mirrors direct.
+  const { response } = await fetchWithProxyFallback(
+    OVERPASS_URL,
+    [...OVERPASS_DIRECT_MIRRORS],
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `data=${encodeURIComponent(query)}`,
+      signal,
+    },
+  );
 
   if (!response.ok) {
     throw new Error(`Overpass API returned ${response.status}`);
@@ -808,7 +819,7 @@ function spawnDotsForRoad(road, altitude, budgetCount = null) {
   }
 
   for (let i = 0; i < count; i++) {
-    if (_dots.length >= MAX_DOTS) return;
+    if (_dots.length >= maxDotsForDevice()) return;
 
     // Random start position: pick a random segment and offset within it —
     // unless this is a queued jam dot with a platoon placement.
@@ -1630,13 +1641,13 @@ function renderRoadsForAltitude(roads, altitude, label, trace = null) {
     roadCount: roads.length,
     visibleRoadCount: filteredRoads.length,
   }) : null;
-  const roadBudgets = allocateRoadDotBudgets(filteredRoads, altitude, MAX_DOTS);
+  const roadBudgets = allocateRoadDotBudgets(filteredRoads, altitude, maxDotsForDevice());
   for (let i = 0; i < filteredRoads.length; i++) {
     const road = filteredRoads[i];
     const budget = roadBudgets[i] || 0;
     if (budget <= 0) continue;
     spawnDotsForRoad(road, altitude, budget);
-    if (_dots.length >= MAX_DOTS) break;
+    if (_dots.length >= maxDotsForDevice()) break;
   }
 
   const renderMetrics = state ? {
