@@ -1,6 +1,7 @@
 import { PbfReader } from 'pbf';
 import { VectorTile } from '@mapbox/vector-tile';
 import { tilesForBounds } from './tomtomTiles.js';
+import { proxyUrlWithBase } from './staticDirect.js';
 
 /**
  * @file TomTom traffic-flow vector-tile client: fetch + MVT decode.
@@ -132,7 +133,7 @@ export async function fetchFlowForBounds(bounds, { signal, zoom = 12 } = {}) {
     if (cached && now - cached.at < DECODE_CACHE_TTL_MS) return cached.segments;
 
     _tilesFetched += 1;
-    const res = await fetch(`/api/tomtom/flow/${z}/${x}/${y}.pbf`, { signal });
+    const res = await fetch(proxyUrlWithBase(`/api/tomtom/flow/${z}/${x}/${y}.pbf`), { signal });
     if (!res.ok) throw new Error(`flow tile ${key}: HTTP ${res.status}`);
     const segments = decodeFlowTile(await res.arrayBuffer(), z, x, y);
     cacheSet(key, { at: Date.now(), segments });

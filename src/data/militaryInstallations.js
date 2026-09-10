@@ -20,7 +20,7 @@ import { warmFireAnchorFloors } from './fireAnchors.js';
 import { normalizeMilitaryInstallations } from './militaryInstallationData.js';
 import { installationFeedback } from './installationFeedback.js';
 import { registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
-import { fetchMilitaryInstallationsDirect, isProxyMissing } from './staticDirect.js';
+import { fetchMilitaryInstallationsDirect, isProxyMissing, proxyUrlWithBase } from './staticDirect.js';
 
 const LAYER_ID = 'military-installations';
 const REQUEST_DEBOUNCE_MS = 500;
@@ -447,7 +447,7 @@ async function loadInstallations() {
       if (exact) query.set('exact', '1');
       let proxyStatus = null;
       try {
-        const response = await fetch(`/api/military-installations?${query}`, { signal: requestAbort.signal });
+        const response = await fetch(proxyUrlWithBase(`/api/military-installations?${query}`), { signal: requestAbort.signal });
         proxyStatus = response.status;
         const body = await response.json();
         if (!response.ok) throw Object.assign(new Error(body?.error || `Installation feed HTTP ${response.status}`), {
@@ -487,9 +487,9 @@ async function loadInstallations() {
       const longitude = (box.west + box.east) / 2;
       const radiusM = Math.min(50000, Math.max(1000, Math.round(Math.max(box.north - box.south, box.east - box.west) * 55_000)));
       try {
-        const placesResponse = await fetch(`/api/google/text-search?${new URLSearchParams({
+        const placesResponse = await fetch(proxyUrlWithBase(`/api/google/text-search?${new URLSearchParams({
           q: 'military installation', lat: latitude.toFixed(5), lon: longitude.toFixed(5), radiusM: String(radiusM),
-        })}`, { signal: requestAbort.signal });
+        })}`), { signal: requestAbort.signal });
         const placesPayload = await placesResponse.json();
         if (!placesResponse.ok) throw new Error(placesPayload?.error || `Google Places HTTP ${placesResponse.status}`);
         const seen = new Set(records.map((record) => `${record.name.toLowerCase()}|${record.latitude.toFixed(3)}|${record.longitude.toFixed(3)}`));

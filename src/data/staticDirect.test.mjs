@@ -394,3 +394,73 @@ test('fetchWithProxyFallback prefixes the proxy call when a base is set', async 
     restoreApiBaseGlobals(saved);
   }
 });
+
+// ---------------------------------------------------------------------------
+// Step 3: every remaining raw /api fetch now routes through proxyUrlWithBase.
+// These are the exact proxy paths used at the 11 converted call sites; the
+// table pins the contract: prefixed when a base is set, byte-identical when
+// empty (request shapes + degrade semantics unchanged — URL only).
+// ---------------------------------------------------------------------------
+
+const STEP3_PROXY_PATHS = Object.freeze([
+  '/api/route?profile=foot&coords=1.000000%2C2.000000',
+  '/api/google/text-search?q=test&lat=30&lon=-97&radiusM=5000',
+  '/api/weather-effects?latitude=30.00000&longitude=-97.00000',
+  '/api/ais-live?maxRows=12000',
+  '/api/ais-live/track?mmsi=123456789',
+  '/api/tomtom/flow/12/1100/1500.pbf',
+  '/api/military-installations?south=29.00000&west=-98.00000&north=31.00000&east=-96.00000',
+  '/api/radio/click/12345678-1234-1234-1234-1234567890ab',
+  '/api/regional-brief?latitude=30.00000&longitude=-97.00000',
+  '/api/tomtom/status',
+  '/api/openai/hud-summary',
+]);
+
+test('step-3 raw proxy paths are prefixed when an API base is set', () => {
+  const saved = saveApiBaseGlobals();
+  try {
+    delete globalThis.location;
+    resetApiBaseCacheForTests();
+    globalThis.window = { __GEV_API_BASE__: 'https://api.example.com/' };
+    for (const path of STEP3_PROXY_PATHS) {
+      assert.equal(proxyUrlWithBase(path), `https://api.example.com${path}`, path);
+    }
+  } finally {
+    restoreApiBaseGlobals(saved);
+  }
+});
+
+test('step-3 raw proxy paths stay relative when no API base is set', () => {
+  const saved = saveApiBaseGlobals();
+  try {
+    delete globalThis.window;
+    delete globalThis.location;
+    resetApiBaseCacheForTests();
+    for (const path of STEP3_PROXY_PATHS) {
+      assert.equal(proxyUrlWithBase(path), path, path);
+    }
+  } finally {
+    restoreApiBaseGlobals(saved);
+  }
+});
+
+test('step-3 status fetch hits the prefixed URL when a base is set (stubbed fetch)', async () => {
+  const saved = saveApiBaseGlobals();
+  const seen = [];
+  const restore = withFetchStub(async (url) => {
+    seen.push(String(url));
+    return jsonResponse({ hasKey: true });
+  });
+  try {
+    delete globalThis.location;
+    resetApiBaseCacheForTests();
+    globalThis.window = { __GEV_API_BASE__: 'https://api.example.com' };
+    // Same construction as the traffic ensureFlowStatus call site.
+    const response = await fetch(proxyUrlWithBase('/api/tomtom/status'));
+    assert.ok(response.ok);
+    assert.deepEqual(seen, ['https://api.example.com/api/tomtom/status']);
+  } finally {
+    restore();
+    restoreApiBaseGlobals(saved);
+  }
+});

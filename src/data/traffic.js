@@ -13,7 +13,7 @@ import {
 import { queuePlatoons, locateAlongRoad } from './trafficQueue.js';
 import { registerDynamicCredit, TOMTOM_CREDIT } from './dataCredits.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
-import { OVERPASS_DIRECT_MIRRORS, fetchWithProxyFallback } from './staticDirect.js';
+import { OVERPASS_DIRECT_MIRRORS, fetchWithProxyFallback, proxyUrlWithBase } from './staticDirect.js';
 import { DESKTOP_TRAFFIC_MAX_DOTS, trafficDotBudget } from '../mobile.js';
 
 /**
@@ -1301,7 +1301,7 @@ export function trafficFeedPresentation({
  */
 function ensureFlowStatus() {
   if (!_flowStatusPromise) {
-    _flowStatusPromise = fetch('/api/tomtom/status')
+    _flowStatusPromise = fetch(proxyUrlWithBase('/api/tomtom/status'))
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
       .then((status) => {
         _liveMode = Boolean(status?.hasKey);
