@@ -127,6 +127,8 @@ export const CITY_POIS = {
       { name: 'Bundaran HI', lat: -6.1949, lon: 106.8231, alt: 500, pitch: -25, heading: 180, buildingHeight: 40 },
       { name: 'Kota Tua (Fatahillah)', lat: -6.1352, lon: 106.8133, alt: 400, pitch: -30, heading: 90, buildingHeight: 20 },
       { name: 'GBK Stadium', lat: -6.2186, lon: 106.8029, alt: 600, pitch: -30, heading: 0, buildingHeight: 35 },
+      { name: 'Senayan South Gate', lat: -6.2260, lon: 106.7980, alt: 450, pitch: -25, heading: 0, buildingHeight: 20 },
+      { name: 'Manggarai Water Gate', lat: -6.2083, lon: 106.8500, alt: 450, pitch: -30, heading: 180, buildingHeight: 15 },
       { name: 'Soekarno-Hatta Airport T3', lat: -6.1256, lon: 106.6559, alt: 800, pitch: -35, heading: 90, buildingHeight: 25 },
     ],
   },

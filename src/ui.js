@@ -2350,6 +2350,7 @@ export class StyleManager {
     this._cctvCalibResetBtn = document.getElementById('cctv-calib-reset-btn');
     this._cctvFrame = document.getElementById('cctv-frame');
     this._cctvFrameWrap = document.getElementById('cctv-frame-wrap');
+    this._cctvLiveLink = document.getElementById('cctv-live-link');
     this._cctvFrameRequestToken = 0;
     this._cctvFramePreloader = null;
     this._cctvSourceBadge = document.getElementById('cctv-source-badge');
@@ -6656,6 +6657,16 @@ export class StyleManager {
     }
 
     this._syncCctvSourceBadge(activeCamera, enabled);
+    if (this._cctvLiveLink) {
+      const liveUrl = activeCamera?.pageUrl || null;
+      if (enabled && liveUrl) {
+        this._cctvLiveLink.href = liveUrl;
+        this._cctvLiveLink.hidden = false;
+      } else {
+        this._cctvLiveLink.hidden = true;
+        this._cctvLiveLink.removeAttribute('href');
+      }
+    }
     this._typeCctvSummary(state?.summary || 'Enable CCTV to start camera-linked intelligence summaries.');
   }
 

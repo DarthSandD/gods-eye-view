@@ -256,7 +256,9 @@ const CAMERA_SEEDS = [
   { id: 'jakarta-monas-n', cityId: 'jakarta', poiIndex: 0, label: 'Monas North Gate', offsetNorthM: 150, offsetEastM: -60, headingDeg: 185, fovDeg: 72, rangeM: 720, elevationM: 24 },
   { id: 'jakarta-hi-roundabout', cityId: 'jakarta', poiIndex: 1, label: 'Bundaran HI Loop', offsetNorthM: -120, offsetEastM: 90, headingDeg: 5, fovDeg: 70, rangeM: 680, elevationM: 22 },
   { id: 'jakarta-kota-tua', cityId: 'jakarta', poiIndex: 2, label: 'Kota Tua Square', offsetNorthM: 80, offsetEastM: 110, headingDeg: 250, fovDeg: 68, rangeM: 640, elevationM: 20 },
-  { id: 'jakarta-gbk-east', cityId: 'jakarta', poiIndex: 3, label: 'GBK East Gate', offsetNorthM: 60, offsetEastM: 170, headingDeg: 275, fovDeg: 74, rangeM: 760, elevationM: 24 },
+  { id: 'jakarta-gbk-east', cityId: 'jakarta', poiIndex: 3, label: 'GBK East Gate', offsetNorthM: 60, offsetEastM: 170, headingDeg: 275, fovDeg: 74, rangeM: 760, elevationM: 24, pageUrl: 'https://cctv.balitower.co.id/Gelora-017-700470_2/embed.html' },
+  { id: 'jakarta-senayan-s', cityId: 'jakarta', poiIndex: 5, label: 'Senayan South Gate', offsetNorthM: -90, offsetEastM: 40, headingDeg: 5, fovDeg: 70, rangeM: 660, elevationM: 20, pageUrl: 'http://cctv.balitower.co.id/Senayan-004-705087_1/embed.html' },
+  { id: 'jakarta-manggarai-gate', cityId: 'jakarta', poiIndex: 6, label: 'Manggarai Water Gate', offsetNorthM: 70, offsetEastM: -40, headingDeg: 195, fovDeg: 68, rangeM: 620, elevationM: 20, pageUrl: 'https://cctv.balitower.co.id/Manggarai-Pintu-Air_1/embed.html?proto=hls' },
   { id: 'serang-square-s', cityId: 'serang', poiIndex: 0, label: 'Alun-Alun South', offsetNorthM: -110, offsetEastM: 30, headingDeg: 10, fovDeg: 70, rangeM: 660, elevationM: 20 },
   { id: 'serang-banten-lama', cityId: 'serang', poiIndex: 1, label: 'Banten Lama Gate', offsetNorthM: 90, offsetEastM: -50, headingDeg: 190, fovDeg: 68, rangeM: 620, elevationM: 20 },
 ];
@@ -1039,7 +1041,18 @@ function currentViewContext() {
  * Each seed is resolved against its city's POI coordinates, offset, and
  * passed through ensureCameraPose to populate derived fields.
  * @returns {Object[]} Array of fully-initialized camera objects.
+ *
+ * Seed entries may carry a pageUrl (public live-player page). It is cleaned
+ * for top-level navigation only — opened in a new tab, never fetched or
+ * iframed, so mixed content is not a factor.
  */
+function cleanPageUrl(value) {
+  if (typeof value !== 'string') return null;
+  const url = value.trim();
+  if (!/^https?:\/\/[^/\s]+\.[^/\s]+/i.test(url)) return null;
+  return url;
+}
+
 function seedCatalog() {
   const catalog = [];
   for (const seed of CAMERA_SEEDS) {
@@ -1070,6 +1083,7 @@ function seedCatalog() {
       groundElevationM: Number(city.groundElevation) || 0,
       absoluteHeightM: (Number(city.groundElevation) || 0) + clamp(seed.elevationM ?? 22, 8, 80),
       pitchDeg: clamp(seed.pitchDeg ?? -17, -40, -4),
+      pageUrl: cleanPageUrl(seed.pageUrl),
     };
     ensureCameraPose(camera);
     catalog.push(camera);
@@ -1176,6 +1190,7 @@ function buildCatalogFromSources(rawSources) {
       pitchDeg,
       license: String(source.license || source.licenseNote || ''),
       poseSource,
+      pageUrl: cleanPageUrl(source.pageUrl || source.liveUrl) ?? seed?.pageUrl ?? null,
     };
     ensureCameraPose(camera);
     catalog.push(camera);
@@ -3441,6 +3456,7 @@ function getPublicCameraState(record, activeId = null) {
     basePose: camera.basePose ? { ...camera.basePose } : null,
     frameUrl: frameUrlFor(camera, refreshMs),
     mediaUrl: mediaUrlFor(camera),
+    pageUrl: camera.pageUrl || null,
   };
 }
 

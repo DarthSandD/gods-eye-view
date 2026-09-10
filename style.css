@@ -6208,6 +6208,17 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   flex-shrink: 0;
 }
 
+/* WATCH LIVE link to the camera's public player page (new tab) */
+.cctv-live-link {
+  display: block;
+  margin: 8px 0;
+  text-align: center;
+  text-decoration: none;
+}
+.cctv-live-link[hidden] {
+  display: none;
+}
+
 /* Lightweight loading shimmer while the active frame is fetching */
 .cctv-frame-wrap::after {
   content: '';
