@@ -144,6 +144,36 @@ export const CITY_POIS = {
       { name: 'Walantaka Toll Gate', lat: -6.1400, lon: 106.2050, alt: 450, pitch: -25, heading: 90, buildingHeight: 15 },
     ],
   },
+  bandung: {
+    name: 'Bandung',
+    groundElevation: 768,
+    viewBounds: { southwest: { lat: -6.98, lng: 107.54 }, northeast: { lat: -6.84, lng: 107.70 } },
+    pois: [
+      { name: 'Gedung Sate', lat: -6.9025, lon: 107.6186, alt: 500, pitch: -25, heading: 180, buildingHeight: 30 },
+      { name: 'Alun-Alun Bandung', lat: -6.9218, lon: 107.6069, alt: 450, pitch: -25, heading: 0, buildingHeight: 20 },
+      { name: 'Dago Junction', lat: -6.8850, lon: 107.6130, alt: 450, pitch: -25, heading: 180, buildingHeight: 20 },
+    ],
+  },
+  semarang: {
+    name: 'Semarang',
+    groundElevation: 4,
+    viewBounds: { southwest: { lat: -7.06, lng: 110.33 }, northeast: { lat: -6.93, lng: 110.50 } },
+    pois: [
+      { name: 'Simpang Lima', lat: -6.9903, lon: 110.4229, alt: 500, pitch: -25, heading: 0, buildingHeight: 25 },
+      { name: 'Lawang Sewu', lat: -6.9843, lon: 110.4108, alt: 450, pitch: -25, heading: 90, buildingHeight: 25 },
+      { name: 'Pelabuhan Tanjung Emas', lat: -6.9480, lon: 110.4250, alt: 600, pitch: -30, heading: 0, buildingHeight: 20 },
+    ],
+  },
+  surabaya: {
+    name: 'Surabaya',
+    groundElevation: 5,
+    viewBounds: { southwest: { lat: -7.36, lng: 112.62 }, northeast: { lat: -7.18, lng: 112.82 } },
+    pois: [
+      { name: 'Tunjungan', lat: -7.2597, lon: 112.7380, alt: 500, pitch: -25, heading: 0, buildingHeight: 25 },
+      { name: 'Balai Kota Surabaya', lat: -7.2499, lon: 112.7395, alt: 450, pitch: -25, heading: 180, buildingHeight: 25 },
+      { name: 'Suramadu Bridge South', lat: -7.2200, lon: 112.7800, alt: 700, pitch: -30, heading: 0, buildingHeight: 40 },
+    ],
+  },
 };
 
 /**

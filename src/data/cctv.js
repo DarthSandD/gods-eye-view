@@ -263,6 +263,13 @@ const CAMERA_SEEDS = [
   { id: 'serang-square-s', cityId: 'serang', poiIndex: 0, label: 'Alun-Alun South', offsetNorthM: -110, offsetEastM: 30, headingDeg: 10, fovDeg: 70, rangeM: 660, elevationM: 20 },
   { id: 'serang-banten-lama', cityId: 'serang', poiIndex: 1, label: 'Banten Lama Gate', offsetNorthM: 90, offsetEastM: -50, headingDeg: 190, fovDeg: 68, rangeM: 620, elevationM: 20 },
   { id: 'serang-walantaka-toll', cityId: 'serang', poiIndex: 3, label: 'Walantaka Toll Gate', offsetNorthM: 60, offsetEastM: -50, headingDeg: 100, fovDeg: 72, rangeM: 700, elevationM: 22, pageUrl: 'https://binamarga.pu.go.id/contents/cctv_tol/?id_ruas=serang-panimbang-seksi-1-serang-rangkasbitung' },
+
+  { id: 'bandung-gedung-sate', cityId: 'bandung', poiIndex: 0, label: 'Gedung Sate Forecourt', offsetNorthM: 100, offsetEastM: -50, headingDeg: 180, fovDeg: 70, rangeM: 660, elevationM: 22, pageUrl: 'https://atcs-dishub.bandung.go.id/' },
+  { id: 'bandung-alun-alun', cityId: 'bandung', poiIndex: 1, label: 'Alun-Alun Core', offsetNorthM: -90, offsetEastM: 60, headingDeg: 10, fovDeg: 68, rangeM: 620, elevationM: 20, pageUrl: 'https://atcs-dishub.bandung.go.id/' },
+  { id: 'semarang-simpang-lima', cityId: 'semarang', poiIndex: 0, label: 'Simpang Lima Loop', offsetNorthM: 110, offsetEastM: -70, headingDeg: 190, fovDeg: 72, rangeM: 700, elevationM: 22, pageUrl: 'https://pantausemar.semarangkota.go.id/' },
+  { id: 'semarang-lawang-sewu', cityId: 'semarang', poiIndex: 1, label: 'Lawang Sewu Front', offsetNorthM: -80, offsetEastM: 90, headingDeg: 270, fovDeg: 68, rangeM: 640, elevationM: 20, pageUrl: 'https://pantausemar.semarangkota.go.id/' },
+  { id: 'surabaya-tunjungan', cityId: 'surabaya', poiIndex: 0, label: 'Tunjungan Corridor', offsetNorthM: 90, offsetEastM: -80, headingDeg: 185, fovDeg: 70, rangeM: 680, elevationM: 22, pageUrl: 'https://lewatmana.com/cam/' },
+  { id: 'surabaya-balai-kota', cityId: 'surabaya', poiIndex: 1, label: 'Balai Kota Forecourt', offsetNorthM: -100, offsetEastM: 50, headingDeg: 5, fovDeg: 68, rangeM: 640, elevationM: 20, pageUrl: 'https://lewatmana.com/cam/' },
 ];
 
 // ---------------------------------------------------------------------------
