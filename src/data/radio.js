@@ -36,6 +36,7 @@ import {
   RADIO_FALLBACK_MIRRORS,
   fetchRadioDirectoryDirect,
   isProxyMissing,
+  proxyUrlWithBase,
 } from './staticDirect.js';
 
 const RADIO_PREFIX = 'radio:';
@@ -1765,7 +1766,7 @@ function tryRadioFallback(
 }
 
 function recordDirectoryClick(id) {
-  fetch(`/api/radio/click/${encodeURIComponent(id)}`, { method: 'POST' }).catch(() => {});
+  fetch(proxyUrlWithBase(`/api/radio/click/${encodeURIComponent(id)}`), { method: 'POST' }).catch(() => {});
   // Static hosting: no broker — count the click directly against a mirror (best-effort).
   fetch(`${RADIO_FALLBACK_MIRRORS[0]}/json/url/${encodeURIComponent(id)}`).catch(() => {});
 }

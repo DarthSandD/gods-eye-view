@@ -45,6 +45,7 @@ import {
 } from './focusDeemphasis.js';
 import { requestWorldFocus } from '../worldFocus.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
+import { proxyUrlWithBase } from './staticDirect.js';
 
 const FOCUS_EVIDENCE_DEV = import.meta.env?.DEV === true;
 
@@ -943,7 +944,7 @@ function applyAisFeedSnapshot(viewer, payload) {
 }
 
 function liveApiUrl() {
-  const base = import.meta.env?.VITE_AIS_LIVE_API_URL || DEFAULT_API_URL;
+  const base = proxyUrlWithBase(import.meta.env?.VITE_AIS_LIVE_API_URL || DEFAULT_API_URL);
   const url = new URL(base, window.location.origin);
   url.searchParams.set('maxRows', String(renderRowLimit()));
   return url.toString();
@@ -1654,7 +1655,7 @@ function startSelectedVesselTrail(record) {
 async function backfillVesselTrail(mmsi, token) {
   let samples = null;
   try {
-    const response = await fetch('/api/ais-live/track?mmsi=' + encodeURIComponent(mmsi), {
+    const response = await fetch(proxyUrlWithBase('/api/ais-live/track?mmsi=' + encodeURIComponent(mmsi)), {
       signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) return;

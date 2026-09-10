@@ -12,10 +12,14 @@ import {
   fetchRadioDirectoryDirect,
   fetchWithProxyFallback,
   launchLibraryDirectUrl,
+  normalizeApiBase,
   normalizeRadioBrowserRow,
   openskyDirectUrl,
   openskyDirectUrlFromProxyUrl,
   postOverpassWithDirectFallback,
+  proxyUrlWithBase,
+  resetApiBaseCacheForTests,
+  resolveApiBase,
 } from './staticDirect.js';
 
 function jsonResponse(payload, { status = 200 } = {}) {
@@ -267,5 +271,196 @@ test('fetchMilitaryInstallationsDirect shapes Overpass elements like the proxy',
     assert.ok(Date.parse(payload.retrievedAt) > 0);
   } finally {
     restore();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// API-base resolution (Worker / hosted-API deployments; default '' = static)
+// ---------------------------------------------------------------------------
+
+function saveApiBaseGlobals() {
+  return {
+    window: globalThis.window,
+    location: globalThis.location,
+    hadWindow: Object.hasOwn(globalThis, 'window'),
+    hadLocation: Object.hasOwn(globalThis, 'location'),
+  };
+}
+
+function restoreApiBaseGlobals(saved) {
+  if (saved.hadWindow) globalThis.window = saved.window;
+  else delete globalThis.window;
+  if (saved.hadLocation) globalThis.location = saved.location;
+  else delete globalThis.location;
+  resetApiBaseCacheForTests();
+}
+
+test('normalizeApiBase trims, strips slashes, empties blanks', () => {
+  assert.equal(normalizeApiBase('  https://api.example.com/// '), 'https://api.example.com');
+  assert.equal(normalizeApiBase('https://api.example.com'), 'https://api.example.com');
+  assert.equal(normalizeApiBase(''), '');
+  assert.equal(normalizeApiBase(null), '');
+  assert.equal(normalizeApiBase('   '), '');
+  assert.equal(normalizeApiBase('/'), '');
+});
+
+test('resolveApiBase defaults to empty so static behavior is unchanged', () => {
+  const saved = saveApiBaseGlobals();
+  try {
+    delete globalThis.window;
+    delete globalThis.location;
+    resetApiBaseCacheForTests();
+    assert.equal(resolveApiBase(), '');
+    assert.equal(proxyUrlWithBase('/api/opensky?lat=30'), '/api/opensky?lat=30');
+  } finally {
+    restoreApiBaseGlobals(saved);
+  }
+});
+
+test('resolveApiBase honors window.__GEV_API_BASE__', () => {
+  const saved = saveApiBaseGlobals();
+  try {
+    delete globalThis.location;
+    resetApiBaseCacheForTests();
+    globalThis.window = { __GEV_API_BASE__: 'https://api.example.com/' };
+    assert.equal(resolveApiBase(), 'https://api.example.com');
+    assert.equal(proxyUrlWithBase('/api/overpass'), 'https://api.example.com/api/overpass');
+  } finally {
+    restoreApiBaseGlobals(saved);
+  }
+});
+
+test('?api= boot override wins and is read once', () => {
+  const saved = saveApiBaseGlobals();
+  try {
+    globalThis.window = { __GEV_API_BASE__: 'https://window.example.com' };
+    globalThis.location = { search: '?api=https%3A%2F%2Fboot.example.com%2F' };
+    resetApiBaseCacheForTests();
+    assert.equal(resolveApiBase(), 'https://boot.example.com');
+    // Read-once: later query changes are ignored until an explicit reset.
+    globalThis.location = { search: '?api=https://other.example.com' };
+    assert.equal(resolveApiBase(), 'https://boot.example.com');
+    resetApiBaseCacheForTests();
+    assert.equal(resolveApiBase(), 'https://other.example.com');
+  } finally {
+    restoreApiBaseGlobals(saved);
+  }
+});
+
+test('proxyUrlWithBase leaves absolute and non-proxy URLs untouched', () => {
+  const saved = saveApiBaseGlobals();
+  try {
+    delete globalThis.location;
+    resetApiBaseCacheForTests();
+    globalThis.window = { __GEV_API_BASE__: 'https://api.example.com' };
+    assert.equal(
+      proxyUrlWithBase('https://overpass-api.de/api/interpreter'),
+      'https://overpass-api.de/api/interpreter',
+    );
+    assert.equal(proxyUrlWithBase('/tiles/0/0/0.pbf'), '/tiles/0/0/0.pbf');
+    assert.equal(proxyUrlWithBase('/apiary/x'), '/apiary/x');
+  } finally {
+    restoreApiBaseGlobals(saved);
+  }
+});
+
+test('fetchWithProxyFallback prefixes the proxy call when a base is set', async () => {
+  const saved = saveApiBaseGlobals();
+  const seen = [];
+  const restore = withFetchStub(async (url) => {
+    seen.push(String(url));
+    if (String(url).startsWith('https://api.example.com/api/')) {
+      return jsonResponse({ error: 'nope' }, { status: 404 });
+    }
+    return jsonResponse({ states: [] });
+  });
+  try {
+    delete globalThis.location;
+    resetApiBaseCacheForTests();
+    globalThis.window = { __GEV_API_BASE__: 'https://api.example.com' };
+    const { response, source, triedDirect } = await fetchWithProxyFallback(
+      '/api/opensky?lat=30&lon=-97',
+      ['https://opensky-network.org/api/states/all?lamin=25'],
+    );
+    assert.ok(response.ok);
+    assert.equal(source, 'direct:opensky-network.org');
+    assert.equal(triedDirect, true);
+    assert.deepEqual(seen, [
+      'https://api.example.com/api/opensky?lat=30&lon=-97',
+      'https://opensky-network.org/api/states/all?lamin=25',
+    ]);
+  } finally {
+    restore();
+    restoreApiBaseGlobals(saved);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Step 3: every remaining raw /api fetch now routes through proxyUrlWithBase.
+// These are the exact proxy paths used at the 11 converted call sites; the
+// table pins the contract: prefixed when a base is set, byte-identical when
+// empty (request shapes + degrade semantics unchanged — URL only).
+// ---------------------------------------------------------------------------
+
+const STEP3_PROXY_PATHS = Object.freeze([
+  '/api/route?profile=foot&coords=1.000000%2C2.000000',
+  '/api/google/text-search?q=test&lat=30&lon=-97&radiusM=5000',
+  '/api/weather-effects?latitude=30.00000&longitude=-97.00000',
+  '/api/ais-live?maxRows=12000',
+  '/api/ais-live/track?mmsi=123456789',
+  '/api/tomtom/flow/12/1100/1500.pbf',
+  '/api/military-installations?south=29.00000&west=-98.00000&north=31.00000&east=-96.00000',
+  '/api/radio/click/12345678-1234-1234-1234-1234567890ab',
+  '/api/regional-brief?latitude=30.00000&longitude=-97.00000',
+  '/api/tomtom/status',
+  '/api/openai/hud-summary',
+]);
+
+test('step-3 raw proxy paths are prefixed when an API base is set', () => {
+  const saved = saveApiBaseGlobals();
+  try {
+    delete globalThis.location;
+    resetApiBaseCacheForTests();
+    globalThis.window = { __GEV_API_BASE__: 'https://api.example.com/' };
+    for (const path of STEP3_PROXY_PATHS) {
+      assert.equal(proxyUrlWithBase(path), `https://api.example.com${path}`, path);
+    }
+  } finally {
+    restoreApiBaseGlobals(saved);
+  }
+});
+
+test('step-3 raw proxy paths stay relative when no API base is set', () => {
+  const saved = saveApiBaseGlobals();
+  try {
+    delete globalThis.window;
+    delete globalThis.location;
+    resetApiBaseCacheForTests();
+    for (const path of STEP3_PROXY_PATHS) {
+      assert.equal(proxyUrlWithBase(path), path, path);
+    }
+  } finally {
+    restoreApiBaseGlobals(saved);
+  }
+});
+
+test('step-3 status fetch hits the prefixed URL when a base is set (stubbed fetch)', async () => {
+  const saved = saveApiBaseGlobals();
+  const seen = [];
+  const restore = withFetchStub(async (url) => {
+    seen.push(String(url));
+    return jsonResponse({ hasKey: true });
+  });
+  try {
+    delete globalThis.location;
+    resetApiBaseCacheForTests();
+    globalThis.window = { __GEV_API_BASE__: 'https://api.example.com' };
+    // Same construction as the traffic ensureFlowStatus call site.
+    const response = await fetch(proxyUrlWithBase('/api/tomtom/status'));
+    assert.ok(response.ok);
+    assert.deepEqual(seen, ['https://api.example.com/api/tomtom/status']);
+  } finally {
+    restore();
+    restoreApiBaseGlobals(saved);
   }
 });

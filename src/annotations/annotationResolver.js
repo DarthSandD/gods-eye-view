@@ -3,7 +3,7 @@ import { lookupNeighborhoodRing } from '../data/neighborhoodPolygons.js';
 import { lookupNaturalRegionOutline, findNaturalRegion } from '../data/naturalEarthRegions.js';
 import { registerDynamicCredit, NATURAL_EARTH_CREDIT } from '../data/dataCredits.js';
 import { isPickedWorldPosition } from '../data/scenePick.js';
-import { fetchWithProxyFallback, OVERPASS_DIRECT_MIRRORS } from '../data/staticDirect.js';
+import { fetchWithProxyFallback, OVERPASS_DIRECT_MIRRORS, proxyUrlWithBase } from '../data/staticDirect.js';
 
 /**
  * Annotation target resolver.
@@ -685,7 +685,7 @@ async function placesTextSearch(query, centerLat, centerLon, radiusM, signal) {
     radiusM: String(radiusM),
   });
   try {
-    const response = await fetch(`/api/google/text-search?${params}`, { signal });
+    const response = await fetch(proxyUrlWithBase(`/api/google/text-search?${params}`), { signal });
     if (!response.ok) { negCache(placesCache, cacheKey, signal, false); return null; } // transient
     const data = await response.json();
     const hit = Array.isArray(data?.places)
