@@ -10,15 +10,15 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <title>God's Eye View</title>
+  <title>Omni Eyes View</title>
   <link rel="icon" type="image/svg+xml" href="./logo.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=swap" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round&display=swap" rel="stylesheet" />
-  <script type="module" crossorigin src="./assets/index-BK90dnbT.js"></script>
-  <link rel="stylesheet" crossorigin href="./assets/index-B8rJU6w6.css">
+  <script type="module" crossorigin src="./assets/index-B5ogBYEk.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-CN4QbfZt.css">
 </head>
 <body>
   <div id="cesiumContainer"></div>
@@ -33,7 +33,7 @@
   <!-- Title -->
   <div id="title-bar">
     <div class="title-glow"></div>
-    <h1><span class="title-logo brand-logo" data-logo-gaze data-logo-src="./logo.svg" aria-hidden="true"><img src="./logo.svg" alt="" /></span> <span>GOD'S EYE <span class="title-accent">VIEW</span></span></h1>
+    <h1><span class="title-logo brand-logo" data-logo-gaze data-logo-src="./logo.svg" aria-hidden="true"><img src="./logo.svg" alt="" /></span> <span>OMNI EYES <span class="title-accent">VIEW</span></span></h1>
     <p class="subtitle">NO PLACE LEFT BEHIND</p>
   </div>
 
@@ -569,6 +569,9 @@
         <div class="location-bar-divider" id="location-bar-divider"></div>
         <div class="location-city-row">
           <div id="location-pills" class="location-pills"></div>
+          <button id="locate-btn" class="locate-btn" type="button" aria-label="Fly to my current location" title="Fly to my current location">
+            <span aria-hidden="true">📍</span><span>LOCATE</span>
+          </button>
           <div class="location-search-wrap">
             <button id="search-toggle" class="search-toggle-btn" title="Search any location">
               <span>&#x1F50E;</span>
@@ -887,7 +890,7 @@
     </div>
     <!-- Kept out of the footer row: it swaps to mission progress and errors, and
          a live region that also holds layout makes the row jump as it speaks. -->
-    <p class="first-run-note" data-first-run-status role="status" aria-live="polite">Tip: the GEV MIC button in the dock lets you talk to the map.</p>
+    <p class="first-run-note" data-first-run-status role="status" aria-live="polite">Tip: the MIC button in the dock lets you talk to the map.</p>
   </aside>
 
   <!-- POWER UP — in-app key setup. Dev-server only: src/keySetup.js removes
@@ -923,7 +926,7 @@
   <div id="loading-screen">
     <div class="loader-content">
       <span class="loader-logo brand-logo" data-logo-gaze data-logo-src="./logo.svg" aria-hidden="true"><img src="./logo.svg" alt="" /></span>
-      <h2>GOD'S EYE <span class="title-accent">VIEW</span></h2>
+      <h2>OMNI EYES <span class="title-accent">VIEW</span></h2>
       <p class="loader-status">Initializing photorealistic world...</p>
     </div>
   </div>
