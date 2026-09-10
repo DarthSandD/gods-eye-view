@@ -47,6 +47,143 @@ const RADIO_MIRRORS = [
   'https://nl1.api.radio-browser.info',
 ];
 const RADIO_UA = 'GodsEyeView/1.0 (Radio Browser directory client)';
+const RADIO_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const RADIO_DIR_TAGS = [null, 'news', 'talk', 'weather', 'emergency', 'aviation', 'marine', 'traffic'];
+const RADIO_DIR_LIMIT = 600;
+const RADIO_CODEC_RE = /^(?:MP3|AAC(?:\+|-LC|-HE)?|HE-AAC)$/i;
+
+/** Trim + strip control chars, capped — mirrors cleanRadioText for worker use. */
+function radioCleanText(value, max) {
+  if (typeof value !== 'string') return '';
+  return value.replace(/[\0-\x1f\x7f]/g, '').trim().slice(0, max);
+}
+
+/** Conservative https-only check mirroring isSafeRadioHttpsUrl (app-side). */
+function radioSafeHttps(value) {
+  if (typeof value !== 'string' || !value) return null;
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase().replace(/\.$/, '');
+    if (url.protocol !== 'https:' || url.username || url.password || !host) return null;
+    if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.includes(':')) return null;
+    const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+    if (v4) {
+      const parts = v4.slice(1).map(Number);
+      if (parts.some((n) => n > 255)) return null;
+      const [a, b] = parts;
+      if (a === 10 || a === 127 || (a === 192 && b === 168) || (a === 172 && b >= 16 && b <= 31) || (a === 169 && b === 254) || a >= 224) return null;
+    }
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
+/** Normalize one Radio Browser row to the broker station shape the app validates. */
+function normalizeRadioRow(raw) {
+  const id = radioCleanText(raw?.stationuuid, 40).toLowerCase();
+  const lat = raw?.geo_lat === null || raw?.geo_lat === '' ? NaN : Number(raw?.geo_lat);
+  const lon = raw?.geo_long === null || raw?.geo_long === '' ? NaN : Number(raw?.geo_long);
+  const codec = radioCleanText(raw?.codec, 16).toUpperCase();
+  const streamUrl = radioSafeHttps(raw?.url_resolved || raw?.url);
+  if (
+    !RADIO_UUID_RE.test(id)
+    || Number(raw?.lastcheckok) !== 1
+    || Number(raw?.hls) === 1
+    || !Number.isFinite(lat) || lat < -90 || lat > 90
+    || !Number.isFinite(lon) || lon < -180 || lon > 180
+    || !RADIO_CODEC_RE.test(codec)
+    || !streamUrl
+  ) return null;
+  const name = radioCleanText(raw?.name, 140);
+  if (!name) return null;
+  const tags = String(raw?.tags ?? '').split(',')
+    .map((t) => radioCleanText(t, 80).toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim())
+    .filter(Boolean).filter((t, i, all) => all.indexOf(t) === i).slice(0, 24);
+  const languages = String(raw?.language ?? '').split(',')
+    .map((l) => radioCleanText(l, 40)).filter(Boolean).slice(0, 8);
+  const bitrate = Number(raw?.bitrate);
+  const homepageRaw = radioSafeHttps(raw?.homepage);
+  return {
+    id, name, lat, lon, streamUrl,
+    homepage: homepageRaw || null,
+    tags, languages,
+    state: radioCleanText(raw?.state, 80),
+    country: radioCleanText(raw?.country, 80),
+    countryCode: '',
+    metadataTrust: 'untrusted-community',
+    codec,
+    bitrate: Number.isInteger(bitrate) && bitrate >= 8 && bitrate <= 1024 ? bitrate : null,
+  };
+}
+
+/** GET one Radio Browser search path with mirror failover; resolves to the row array. */
+async function fetchRadioSearch(path) {
+  const targets = RADIO_MIRRORS.map((m) => `${m}${path}`);
+  const init = { headers: { Accept: 'application/json', 'User-Agent': RADIO_UA } };
+  let lastErr = null;
+  for (const url of targets) {
+    try {
+      const res = await timedFetch(url, init, 12000);
+      if (!res.ok) throw new Error(`mirror HTTP ${res.status}`);
+      const payload = await res.json();
+      if (!Array.isArray(payload)) throw new Error('mirror payload was not an array');
+      return payload;
+    } catch (error) {
+      lastErr = error;
+    }
+  }
+  throw lastErr || new Error('No Radio Browser mirror is available');
+}
+
+/**
+ * Build a broker-shaped station catalog (same response contract as the Vite
+ * dev-server broker: {stations, updatedAt, stale, degraded, ...}). Stateless:
+ * no cross-request cache except a short edge cache on the response.
+ */
+async function buildRadioCatalog() {
+  const jobs = RADIO_DIR_TAGS.map((tag, index) => (async () => {
+    const params = new URLSearchParams({
+      has_geo_info: 'true', is_https: 'true', hidebroken: 'true',
+      order: 'clickcount', reverse: 'true',
+      limit: String(index === 0 ? 300 : 120),
+    });
+    if (tag) params.set('tag', tag);
+    try {
+      const rows = await fetchRadioSearch(`/json/stations/search?${params}`);
+      const stations = rows.map(normalizeRadioRow).filter(Boolean);
+      const wanted = String(tag || '').toLowerCase();
+      const covered = !wanted || stations.some((s) => s.tags.some((t) => t === wanted || t.includes(wanted)));
+      return { succeeded: stations.length > 0 && covered, stations };
+    } catch {
+      return { succeeded: false, stations: [] };
+    }
+  })());
+  const outcomes = await Promise.all(jobs);
+  const selected = [];
+  const seen = new Set();
+  const take = (station) => {
+    if (!station || seen.has(station.id) || selected.length >= RADIO_DIR_LIMIT) return;
+    seen.add(station.id);
+    selected.push(station);
+  };
+  for (const outcome of outcomes.slice(1)) outcome.stations.slice(0, 45).forEach(take);
+  outcomes.flatMap((o) => o.stations)
+    .sort((a, b) => (b.clickCount || 0) - (a.clickCount || 0) || a.name.localeCompare(b.name))
+    .forEach(take);
+  if (!selected.length) throw new Error('Radio directory returned no usable stations');
+  const successfulQueries = outcomes.filter((o) => o.succeeded).length;
+  return {
+    stations: selected,
+    updatedAt: new Date().toISOString(),
+    stale: false,
+    degraded: false,
+    degradedReason: null,
+    coverage: { successfulQueries, totalQueries: outcomes.length, stationCount: selected.length },
+    acceptedGeneration: null,
+    catalogInstance: 'worker',
+  };
+}
 
 const GBFS_ALLOWED_HOSTS = new Set([
   'gbfs.lyft.com',
@@ -338,22 +475,33 @@ export default {
       // --- Radio Browser (mirror failover) ---------------------------------
       if (path === '/api/radio' || path.startsWith('/api/radio/')) {
         const sub = path.replace(/^\/api\/radio/, '') || '/';
-        const targets = RADIO_MIRRORS.map((m) => `${m}${sub}${url.search}`);
-        const init =
-          request.method === 'POST'
-            ? { method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': RADIO_UA }, body: await request.text() }
-            : { headers: { Accept: 'application/json', 'User-Agent': RADIO_UA } };
-        let res = null;
-        try {
-          res = await fetchFailover(targets, init, 12000);
-        } catch {
-          return err(502, 'radio-browser upstream unreachable');
+        // Click accounting: uuid-shaped ids only, fire upstream, always 204.
+        // Stateless worker keeps no served-set, so any well-formed uuid is accepted.
+        const clickMatch = sub.match(/^\/click\/([0-9a-f-]+)$/i);
+        if (clickMatch) {
+          if (request.method !== 'POST') return err(405, 'Method Not Allowed');
+          const id = clickMatch[1].toLowerCase();
+          if (!RADIO_UUID_RE.test(id)) return err(404, 'Unknown radio station');
+          const targets = RADIO_MIRRORS.map((m) => `${m}/json/url/${id}`);
+          try {
+            const res = await fetchFailover(
+              targets,
+              { headers: { Accept: 'application/json', 'User-Agent': RADIO_UA } },
+              12000,
+            );
+            await res.text().catch(() => '');
+          } catch { /* accounting is best-effort */ }
+          return new Response(null, { status: 204, headers: corsHeaders({ 'Cache-Control': 'no-store' }) });
         }
-        const body = await res.text();
-        return new Response(body, {
-          status: res.status,
-          headers: { 'Content-Type': 'application/json; charset=utf-8', ...corsHeaders({ 'Cache-Control': 'no-store' }) },
-        });
+        // Directory catalog in the dev-broker shape the app validates.
+        if (sub !== '/stations') return err(404, 'Unknown radio route');
+        if (request.method !== 'GET') return err(405, 'Method Not Allowed');
+        try {
+          const catalog = await buildRadioCatalog();
+          return ok(catalog, 'public, max-age=300');
+        } catch {
+          return err(503, 'Radio directory is temporarily unavailable', { degraded: true, degradedReason: 'refresh-failed' });
+        }
       }
 
       // --- GBFS (allowlisted providers only) -------------------------------
