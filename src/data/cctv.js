@@ -1568,8 +1568,9 @@ function paintProjectionPlaceholder(ctx, camera, health = null) {
   ctx.fillStyle = 'rgba(127, 216, 231, 0.8)';
   ctx.font = '500 24px "JetBrains Mono", monospace';
   ctx.fillText(city.toUpperCase(), 46, 112);
-  ctx.font = '500 21px "JetBrains Mono", monospace';
-  ctx.fillText(status.slice(0, 58), 46, h - 42);
+  // Status line is the phone-readable diagnostic — kept large on purpose.
+  ctx.font = '600 34px "JetBrains Mono", monospace';
+  ctx.fillText(status.slice(0, 58), 46, h - 56);
 }
 
 /**
@@ -1719,6 +1720,10 @@ function createProjectionRuntime(record) {
     image: null,
     video: null,
     hls: null,
+    // Video stream state for the self-diagnosing placeholder: null = image
+    // mode, 'connecting' = waiting for first frame, 'playing' = live,
+    // 'failed' = fatal stream error (points at WATCH LIVE).
+    streamState: null,
     planeEntity: null,
     cameraId: String(record.camera.id),
     labelPosition: new Cesium.Cartesian3(),
@@ -1759,6 +1764,7 @@ function createProjectionRuntime(record) {
     // HLS has no native desktop playback — attach hls.js when the CDN loaded.
     // CDN blocked/unavailable falls back to direct src (mp4/webm still play).
     const HlsCtor = typeof window !== 'undefined' ? window.Hls : null;
+    runtime.streamState = 'connecting';
     if (feedType === 'hls' && HlsCtor && HlsCtor.isSupported && HlsCtor.isSupported()) {
       try {
         const hls = new HlsCtor({ enableWorker: true, maxBufferLength: 30 });
@@ -1766,6 +1772,7 @@ function createProjectionRuntime(record) {
           if (data && data.fatal) {
             try { hls.destroy(); } catch { /* no-op */ }
             runtime.hls = null;
+            runtime.streamState = 'failed';
           }
         });
         hls.loadSource(mediaUrl);
@@ -1842,6 +1849,7 @@ function destroyProjectionRuntime(runtime) {
     try { runtime.hls.destroy(); } catch { /* no-op */ }
     runtime.hls = null;
   }
+  runtime.streamState = null;
   if (runtime.video) {
     runtime.video.pause();
     runtime.video.removeAttribute('src');
@@ -1898,7 +1906,7 @@ function refreshProjectionImage(record, force = false) {
  * @param {Object} runtime - Projection runtime.
  * @param {Object|null} health - Health state for status text.
  */
-function paintPlaceholderThrottled(record, runtime, health) {
+function paintPlaceholderThrottled(record, runtime, health, statusOverride = null) {
   const now = Date.now();
   if (now - safeNumber(runtime.lastPlaceholderPaintAt, 0) < PLACEHOLDER_REPAINT_MS) return;
   runtime.lastPlaceholderPaintAt = now;
@@ -1908,7 +1916,10 @@ function paintPlaceholderThrottled(record, runtime, health) {
   // would be skipped as "unchanged" and leave the placeholder on the plane.
   runtime.lastFrameSignature = null;
   runtime.canvasStamp = (runtime.canvasStamp || 0) + 1;
-  paintProjectionPlaceholder(runtime.ctx, record.camera, health);
+  const effectiveHealth = statusOverride
+    ? { status: health?.status || '', message: statusOverride }
+    : health;
+  paintProjectionPlaceholder(runtime.ctx, record.camera, effectiveHealth);
 }
 
 /**
@@ -1931,9 +1942,17 @@ function drawProjectionFrame(record) {
       runtime.ctx.clearRect(0, 0, PROJECTION_CANVAS_WIDTH, PROJECTION_CANVAS_HEIGHT);
       runtime.ctx.drawImage(video, 0, 0, PROJECTION_CANVAS_WIDTH, PROJECTION_CANVAS_HEIGHT);
       runtime.canvasStamp = (runtime.canvasStamp || 0) + 1;
+      runtime.streamState = 'playing';
       return;
     }
-    paintPlaceholderThrottled(record, runtime, health);
+    // Self-diagnosing placeholder: the plane prints its own state in big text
+    // so a phone screenshot (or a glance) tells us connecting vs failed.
+    paintPlaceholderThrottled(
+      record,
+      runtime,
+      health,
+      runtime.streamState === 'failed' ? 'STREAM DOWN — USE WATCH LIVE' : 'CONNECTING LIVE…'
+    );
     return;
   }
 
