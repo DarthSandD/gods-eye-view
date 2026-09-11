@@ -39,33 +39,40 @@
     "name": "Alun-Alun Core",
     "city": "Bandung",
     "cityId": "bandung",
-    "provider": "ATCS Dishub Bandung",
-    "feedType": "image",
+    "provider": "ATCS Dishub · SP MERDEKA ACEH",
+    "feedType": "hls",
+    "url": "https://atcs-dishub.bandung.go.id:1990/MerdekaAceh/index.m3u8",
     "pageUrl": "https://atcs-dishub.bandung.go.id/",
-    "sourceKind": "seed",
-    "license": "Public city CCTV portal"
+    "sourceKind": "configured",
+    "license": "Public city CCTV via ATCS Dishub Bandung"
   },
   {
     "id": "semarang-simpang-lima",
     "name": "Simpang Lima Loop",
     "city": "Semarang",
     "cityId": "semarang",
-    "provider": "PantauSemar Semarang",
-    "feedType": "image",
+    "provider": "Dishub Semarang · PAHLAWAN-SIMPANG LIMA",
+    "feedType": "hls",
+    "url": "https://livepantau.semarangkota.go.id/0beb33ae-5fa4-4269-bc5d-497c1808133c/index.m3u8",
+    "lat": -6.991439598206753,
+    "lon": 110.42225731277902,
     "pageUrl": "https://pantausemar.semarangkota.go.id/",
-    "sourceKind": "seed",
-    "license": "Public city CCTV portal"
+    "sourceKind": "configured",
+    "license": "Public city CCTV via PantauSemar"
   },
   {
     "id": "semarang-lawang-sewu",
     "name": "Lawang Sewu Front",
     "city": "Semarang",
     "cityId": "semarang",
-    "provider": "PantauSemar Semarang",
-    "feedType": "image",
+    "provider": "Dishub Semarang · TUGUMUDA (Lawang Sewu)",
+    "feedType": "hls",
+    "url": "https://livepantau.semarangkota.go.id/f71d6c72-db49-475b-b170-bfac944eeac0/index.m3u8",
+    "lat": -6.9843574,
+    "lon": 110.40915,
     "pageUrl": "https://pantausemar.semarangkota.go.id/",
-    "sourceKind": "seed",
-    "license": "Public city CCTV portal"
+    "sourceKind": "configured",
+    "license": "Public city CCTV via PantauSemar"
   },
   {
     "id": "surabaya-tunjungan",
