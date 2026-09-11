@@ -15,3 +15,7 @@
 - Tri phone proof (private tab → Serang → Walantaka, 5s buffer)
 - If still black: screenshot + camera name → fix from evidence
 - Bonus: Bandung/Semarang/Surabaya direct-stream extraction
+
+## Standing rules (Tri, 2026-09-11)
+- Unified deploys: identical dist on both domains, every release
+- README rides every change: update the CCTV/deployment sections with each fix
