@@ -275,7 +275,7 @@ Thirteen layers and map sources. **Eleven have a keyless path.** Some offer addi
 | 🛰️ **Satellites** | 838-object catalog, color-coded by class with a live legend — the **DENSE** chip drops in the whole Starlink shell | CelesTrak | 🟢 |
 | 🌍 **Earthquakes** | Global seismic activity, last 24h | USGS | 🟢 |
 | 🚗 **Traffic** | Simulated vehicles on OSM roads. With TomTom, live flow speeds drive the simulation and congestion colors below ~8 km; individual vehicle positions are not live observations | TomTom + OSM | 🟢 simulation · 🟡 live flow speeds |
-| 📹 **CCTV Mesh** | ~800 public cameras projected *into* the 3D space — Austin · California (Caltrans) · London (TfL). Positions are published; poses are estimated priors **you calibrate by dragging a gizmo on the camera itself** | City APIs | 🟢 |
+| 📹 **CCTV Mesh** | ~800 public cameras projected *into* the 3D space — Austin · California (Caltrans) · London (TfL) — **plus 5 live Indonesian HLS feeds (Jakarta, Serang, Bandung, Semarang ×2, see below)**. Positions are published; poses are estimated priors **you calibrate by dragging a gizmo on the camera itself** | City APIs | 🟢 |
 | 📻 **Radio** | Geolocated world radio with an **analog tuner** — drag the needle across up to 750 stations and the globe flies to each broadcaster | Radio Browser / broadcasters | 🟢 |
 | 🚲 **Bikeshare** | Live station availability | GBFS | 🟢 |
 | 🔥 **Active Fires** | Live NASA FIRMS detections, trailing 24h | NASA FIRMS | 🟡 |
@@ -363,6 +363,24 @@ src/
 ```
 
 See [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md) for the authoritative runtime reference.
+
+### 🌐 Live deployments (Omni Eyes)
+- https://omnieyes.pages.dev/ (Cloudflare Pages)
+- https://darthsandd.github.io/omni-eyes-view/ (GitHub Pages)
+- API: https://gev-api.darthsandd.workers.dev (Worker proxying 15+ open-data sources)
+- Rule: both front ends ship the identical build on every release.
+
+### 📹 Indonesian live CCTV (keyless)
+| Camera | Source feed | Status |
+|---|---|---|
+| Jakarta — Senayan Toll (Janger KM 04+600) | Jasa Marga / Bina Marga HLS | live (provider flaps, auto-recovers) |
+| Serang — Walantaka Toll (ON RAMP) | Wika Serang-Panimbang HLS | live |
+| Bandung — Alun-Alun (SP Merdeka Aceh) | ATCS Dishub HLS | live |
+| Semarang — Simpang Lima (exact GPS) | PantauSemar HLS | live |
+| Semarang — Lawang Sewu / Tugumuda (exact GPS) | PantauSemar HLS | live |
+| Bandung Gedung Sate, Surabaya ×2 | city portals | data card + WATCH LIVE link |
+
+Playback is HLS via self-hosted `vendor/hls.min.js`; the worker rewrites playlists and proxies segments so CORS is solved server-side. Camera catalog lives in `config/cctv_sources.indonesia.json` and ships to the worker as the `CCTV_SOURCES_JSON` secret.
 
 ---
 
