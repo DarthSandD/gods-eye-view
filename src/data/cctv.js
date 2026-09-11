@@ -4486,7 +4486,10 @@ const cctvLayer = {
    * Enables the layer: shows entities, starts the projection loop, and kicks
    * the staggered geometry-load queue. Heavy work (per-camera ground
    * sampling) is deferred/batched so the frame budget never collapses at
-   * enable time.
+   * enable time. Enable is PASSIVE: no camera auto-activates (a flapping
+   * upstream used to paint a black flickering plane on open) — markers and
+   * coverage show, the user taps to play. A previously chosen camera persists
+   * across toggles via _activeCameraId.
    */
   enable() {
     _enabled = true;
@@ -4499,10 +4502,8 @@ const cctvLayer = {
       const coverage = /^cctv-(.+)-(?:ray-tl|ray-tr|ray-br|ray-bl|cap|plane|plane-label)$/.exec(pickedId);
       return Boolean(coverage && _recordById.has(coverage[1]));
     });
-    if (!_activeCameraId && _records.length) {
-      _activeCameraId = _records[0].camera.id;
-      _autoHopSuspended = false;
-    }
+    // Passive enable (see doc comment): never auto-select a camera here. A
+    // camera the user chose earlier persists via _activeCameraId and resumes.
     const activeRecord = getActiveRecord();
     if (activeRecord) {
       ensureProjectionRuntime(activeRecord);
