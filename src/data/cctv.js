@@ -1718,6 +1718,7 @@ function createProjectionRuntime(record) {
     ctx,
     image: null,
     video: null,
+    hls: null,
     planeEntity: null,
     cameraId: String(record.camera.id),
     labelPosition: new Cesium.Cartesian3(),
@@ -1754,7 +1755,29 @@ function createProjectionRuntime(record) {
     video.playsInline = true;
     video.crossOrigin = 'anonymous';
     video.preload = 'auto';
-    video.src = mediaUrlFor(record.camera);
+    const mediaUrl = mediaUrlFor(record.camera);
+    // HLS has no native desktop playback — attach hls.js when the CDN loaded.
+    // CDN blocked/unavailable falls back to direct src (mp4/webm still play).
+    const HlsCtor = typeof window !== 'undefined' ? window.Hls : null;
+    if (feedType === 'hls' && HlsCtor && HlsCtor.isSupported && HlsCtor.isSupported()) {
+      try {
+        const hls = new HlsCtor({ enableWorker: true, maxBufferLength: 30 });
+        hls.on(HlsCtor.Events.ERROR, (_event, data) => {
+          if (data && data.fatal) {
+            try { hls.destroy(); } catch { /* no-op */ }
+            runtime.hls = null;
+          }
+        });
+        hls.loadSource(mediaUrl);
+        hls.attachMedia(video);
+        runtime.hls = hls;
+      } catch {
+        runtime.hls = null;
+        video.src = mediaUrl;
+      }
+    } else {
+      video.src = mediaUrl;
+    }
     video.addEventListener('canplay', () => {
       video.play().catch(() => {});
     });
@@ -1815,6 +1838,10 @@ function ensureProjectionRuntime(record) {
  */
 function destroyProjectionRuntime(runtime) {
   if (!runtime) return;
+  if (runtime.hls) {
+    try { runtime.hls.destroy(); } catch { /* no-op */ }
+    runtime.hls = null;
+  }
   if (runtime.video) {
     runtime.video.pause();
     runtime.video.removeAttribute('src');

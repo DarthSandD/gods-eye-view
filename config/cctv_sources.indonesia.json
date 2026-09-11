@@ -1,0 +1,92 @@
+[
+  {
+    "id": "jakarta-senayan-toll",
+    "name": "Senayan Toll Gate",
+    "city": "Jakarta",
+    "cityId": "jakarta",
+    "provider": "Jasa Marga · JANGER KM 04+600",
+    "feedType": "hls",
+    "url": "https://jmlive.jasamarga.com/hls/4/69174846-477f-4d07-b85e-2adf6ecc782f/index.m3u8",
+    "pageUrl": "https://binamarga.pu.go.id/contents/cctv_tol/?id_ruas=jakarta-tangerang",
+    "sourceKind": "configured",
+    "license": "Public toll CCTV via Bina Marga"
+  },
+  {
+    "id": "serang-walantaka-toll",
+    "name": "Walantaka Toll Gate",
+    "city": "Serang",
+    "cityId": "serang",
+    "provider": "Wika Serang-Panimbang · ON RAMP WALANTAKA",
+    "feedType": "hls",
+    "url": "https://cctv.wikaserangpanimbang.com/camera/bearer/tiod/1/1/index.m3u8",
+    "pageUrl": "https://binamarga.pu.go.id/contents/cctv_tol/?id_ruas=serang-panimbang-seksi-1-serang-rangkasbitung",
+    "sourceKind": "configured",
+    "license": "Public toll CCTV via Bina Marga"
+  },
+  {
+    "id": "bandung-gedung-sate",
+    "name": "Gedung Sate Forecourt",
+    "city": "Bandung",
+    "cityId": "bandung",
+    "provider": "ATCS Dishub Bandung",
+    "feedType": "image",
+    "pageUrl": "https://atcs-dishub.bandung.go.id/",
+    "sourceKind": "seed",
+    "license": "Public city CCTV portal"
+  },
+  {
+    "id": "bandung-alun-alun",
+    "name": "Alun-Alun Core",
+    "city": "Bandung",
+    "cityId": "bandung",
+    "provider": "ATCS Dishub Bandung",
+    "feedType": "image",
+    "pageUrl": "https://atcs-dishub.bandung.go.id/",
+    "sourceKind": "seed",
+    "license": "Public city CCTV portal"
+  },
+  {
+    "id": "semarang-simpang-lima",
+    "name": "Simpang Lima Loop",
+    "city": "Semarang",
+    "cityId": "semarang",
+    "provider": "PantauSemar Semarang",
+    "feedType": "image",
+    "pageUrl": "https://pantausemar.semarangkota.go.id/",
+    "sourceKind": "seed",
+    "license": "Public city CCTV portal"
+  },
+  {
+    "id": "semarang-lawang-sewu",
+    "name": "Lawang Sewu Front",
+    "city": "Semarang",
+    "cityId": "semarang",
+    "provider": "PantauSemar Semarang",
+    "feedType": "image",
+    "pageUrl": "https://pantausemar.semarangkota.go.id/",
+    "sourceKind": "seed",
+    "license": "Public city CCTV portal"
+  },
+  {
+    "id": "surabaya-tunjungan",
+    "name": "Tunjungan Corridor",
+    "city": "Surabaya",
+    "cityId": "surabaya",
+    "provider": "Lewatmana Surabaya",
+    "feedType": "image",
+    "pageUrl": "https://lewatmana.com/cam/",
+    "sourceKind": "seed",
+    "license": "Public traffic CCTV portal"
+  },
+  {
+    "id": "surabaya-balai-kota",
+    "name": "Balai Kota Forecourt",
+    "city": "Surabaya",
+    "cityId": "surabaya",
+    "provider": "Lewatmana Surabaya",
+    "feedType": "image",
+    "pageUrl": "https://lewatmana.com/cam/",
+    "sourceKind": "seed",
+    "license": "Public traffic CCTV portal"
+  }
+]

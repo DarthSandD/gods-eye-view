@@ -304,6 +304,260 @@ async function handleOpenSky(url, env) {
 }
 
 // ---------------------------------------------------------------------------
+// CCTV (production parity with the vite dev broker)
+// ---------------------------------------------------------------------------
+const CCTV_UA = 'omni-eyes-cctv-worker/1.0';
+const CCTV_FRAME_TIMEOUT_MS = 8000;
+const CCTV_MAX_PLAYLIST_BYTES = 512 * 1024;
+const CCTV_MAX_BYTES = 64 * 1024 * 1024;
+
+function cctvNormalizeFeedType(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw) return 'image';
+  if (raw === 'mjpg') return 'mjpeg';
+  if (raw === 'jpeg' || raw === 'jpg' || raw === 'png' || raw === 'gif') return 'image';
+  if (raw === 'video') return 'mp4';
+  if (raw === 'stream') return 'hls';
+  return raw;
+}
+
+function cctvIsVideo(feedType) {
+  return feedType === 'mp4' || feedType === 'hls' || feedType === 'webm';
+}
+
+function cctvLoadSources(env) {
+  const raw = (env.CCTV_SOURCES_JSON || '').trim();
+  if (!raw) return { error: 'CCTV_SOURCES_JSON is not set' };
+  try {
+    const parsed = JSON.parse(raw);
+    const list = Array.isArray(parsed) ? parsed : parsed.sources || [];
+    if (!Array.isArray(list)) return { error: 'CCTV_SOURCES_JSON has no source list' };
+    return { sources: list };
+  } catch {
+    return { error: 'CCTV_SOURCES_JSON is not valid JSON' };
+  }
+}
+
+function cctvFind(sources, id) {
+  return sources.find((s) => s && String(s.id) === String(id)) || null;
+}
+
+function cctvEscapeXml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function cctvHashSeed(str) {
+  let h = 2166136261;
+  const s = String(str);
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function cctvSyntheticSvg({ cameraId, label, city, status }) {
+  const seed = cctvHashSeed(`${cameraId}:${label}:${city}`);
+  const hue = seed % 360;
+  const hue2 = (hue + 46) % 360;
+  const ts = new Date().toISOString().replace('T', ' ').slice(0, 19);
+  const safeLabel = cctvEscapeXml(label);
+  const safeCity = cctvEscapeXml(city || 'GLOBAL GRID');
+  const safeId = cctvEscapeXml(cameraId);
+  const safeStatus = cctvEscapeXml(status || 'SYNTHETIC');
+  return `
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="hsl(${hue}, 35%, 10%)" />
+      <stop offset="60%" stop-color="hsl(${hue2}, 42%, 6%)" />
+      <stop offset="100%" stop-color="#020509" />
+    </linearGradient>
+    <radialGradient id="flare" cx="0.22" cy="0.24" r="0.78">
+      <stop offset="0%" stop-color="hsla(${hue2}, 100%, 65%, 0.35)" />
+      <stop offset="100%" stop-color="hsla(${hue2}, 100%, 40%, 0)" />
+    </radialGradient>
+    <pattern id="scan" width="8" height="8" patternUnits="userSpaceOnUse">
+      <rect width="8" height="8" fill="transparent" />
+      <rect y="0" width="8" height="1" fill="rgba(255,255,255,0.08)" />
+      <rect y="4" width="8" height="1" fill="rgba(255,255,255,0.05)" />
+    </pattern>
+  </defs>
+  <rect width="960" height="540" fill="url(#bg)" />
+  <rect width="960" height="540" fill="url(#flare)" />
+  <rect width="960" height="540" fill="url(#scan)" />
+  <g fill="none" stroke="rgba(180,248,255,0.2)" stroke-width="1">
+    <rect x="70" y="80" width="820" height="380" rx="8" />
+    <line x1="70" y1="270" x2="890" y2="270" />
+    <line x1="480" y1="80" x2="480" y2="460" />
+  </g>
+  <g fill="#9cefff" font-family="JetBrains Mono, monospace" text-transform="uppercase">
+    <text x="74" y="54" font-size="16" letter-spacing="2">CCTV FEED</text>
+    <text x="74" y="512" font-size="14" letter-spacing="1.5">${safeLabel} · ${safeCity}</text>
+    <text x="646" y="512" font-size="13" letter-spacing="1.2">${safeId}</text>
+    <text x="704" y="54" font-size="15" letter-spacing="2">${cctvEscapeXml(ts)}</text>
+    <text x="74" y="486" font-size="13" letter-spacing="1.3">${safeStatus}</text>
+  </g>
+</svg>`.trim();
+}
+
+function cctvRewritePlaylist(text, playlistUrl, cameraId) {
+  let base;
+  try {
+    base = new URL(playlistUrl);
+  } catch {
+    return String(text);
+  }
+  return String(text).split('\n').map((line) => {
+    const t = line.trim();
+    if (!t || t.startsWith('#')) return line;
+    let abs;
+    try {
+      abs = new URL(t, base).toString();
+    } catch {
+      return line;
+    }
+    if (!/^https?:\/\//i.test(abs)) return line;
+    return `/api/cctv/media/${encodeURIComponent(cameraId)}?u=${encodeURIComponent(abs)}`;
+  }).join('\n');
+}
+
+async function handleCctv(request, url, env) {
+  const path = url.pathname;
+  const loaded = cctvLoadSources(env);
+  if (loaded.error) {
+    if (path.startsWith('/api/cctv/health')) return err(503, loaded.error, { cameras: [] });
+    return err(503, loaded.error, { sources: [] });
+  }
+  const sources = loaded.sources;
+
+  if (path === '/api/cctv/sources' || path === '/api/cctv/sources/') {
+    return ok({ sources }, 'no-store');
+  }
+
+  if (path === '/api/cctv/health' || path === '/api/cctv/health/') {
+    const now = Date.now();
+    return ok({
+      cameras: sources.map((s) => {
+        const feedType = cctvNormalizeFeedType(s?.feedType);
+        const live = typeof s?.url === 'string' && !!s.url.trim();
+        return {
+          id: String(s?.id || ''),
+          status: live ? 'ok' : 'degraded',
+          sourceKind: live ? (cctvIsVideo(feedType) ? 'live' : 'snapshot') : 'fallback',
+          label: String(s?.provider || s?.name || ''),
+          message: live ? 'Feed configured' : 'No upstream URL — placeholder',
+          updatedAt: now,
+        };
+      }),
+    }, 'no-store');
+  }
+
+  const streamMatch = path.match(/^\/api\/cctv\/stream\/([^/]+)\/?$/);
+  if (streamMatch) {
+    const cameraId = decodeURIComponent(streamMatch[1]).trim() || 'camera';
+    const source = cctvFind(sources, cameraId);
+    const feedType = cctvNormalizeFeedType(source?.feedType);
+    return ok({
+      id: cameraId,
+      feedType,
+      mediaUrl: cctvIsVideo(feedType) ? `/api/cctv/media/${encodeURIComponent(cameraId)}` : null,
+      frameUrl: `/api/cctv/frame/${encodeURIComponent(cameraId)}`,
+      provider: source?.provider || '',
+      sourceKind: source?.sourceKind || (source?.url ? 'configured' : 'fallback'),
+    }, 'no-store');
+  }
+
+  const mediaMatch = path.match(/^\/api\/cctv\/media\/([^/]+)\/?$/);
+  if (mediaMatch) {
+    const cameraId = decodeURIComponent(mediaMatch[1]).trim() || 'camera';
+    const source = cctvFind(sources, cameraId);
+    const target = (url.searchParams.get('u') || source?.url || '').trim();
+    if (!target || !/^https?:\/\//i.test(target)) {
+      return err(404, 'No media URL configured for this camera');
+    }
+    const headers = { 'User-Agent': CCTV_UA, Accept: '*/*' };
+    const range = request.headers.get('range');
+    if (range) headers.Range = range;
+    const upstream = await timedFetch(target, { headers }, 15000).catch(() => null);
+    if (!upstream) return err(502, 'cctv upstream unreachable');
+    if (!upstream.ok) return err(upstream.status, `cctv upstream HTTP ${upstream.status}`);
+    const contentType = upstream.headers.get('content-type') || '';
+    const isPlaylist = /mpegurl/i.test(contentType) || /\.m3u8(?:$|[?#])/i.test(target);
+    if (isPlaylist) {
+      const text = await upstream.text().catch(() => null);
+      if (text === null) return err(502, 'cctv playlist unreadable');
+      if (text.length > CCTV_MAX_PLAYLIST_BYTES) return err(502, 'cctv playlist too large');
+      const rewritten = cctvRewritePlaylist(text, target, cameraId);
+      return new Response(rewritten, {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/vnd.apple.mpegurl',
+          ...corsHeaders({ 'Cache-Control': 'no-store', 'X-CCTV-Source': 'live-playlist' }),
+        },
+      });
+    }
+    const buf = await upstream.arrayBuffer().catch(() => null);
+    if (!buf) return err(502, 'cctv upstream body unreadable');
+    if (buf.byteLength > CCTV_MAX_BYTES) return err(502, 'cctv upstream response too large');
+    const outHeaders = {
+      'Content-Type': contentType || 'application/octet-stream',
+      ...corsHeaders({ 'Cache-Control': 'no-store', 'X-CCTV-Source': 'live-media' }),
+    };
+    const acceptRanges = upstream.headers.get('accept-ranges');
+    if (acceptRanges) outHeaders['Accept-Ranges'] = acceptRanges;
+    return new Response(buf, { status: 200, headers: outHeaders });
+  }
+
+  const frameMatch = path.match(/^\/api\/cctv\/frame\/([^/]+)\/?$/);
+  if (frameMatch) {
+    const cameraId = decodeURIComponent(frameMatch[1]).trim() || 'camera';
+    const source = cctvFind(sources, cameraId) || {};
+    const feedType = cctvNormalizeFeedType(source.feedType);
+    const candidate = source.snapshotUrl || (!cctvIsVideo(feedType) ? source.url : '');
+    if (candidate && /^https?:\/\//i.test(candidate)) {
+      const up = await timedFetch(candidate, {
+        headers: { 'User-Agent': CCTV_UA, Accept: 'image/*,*/*' },
+      }, CCTV_FRAME_TIMEOUT_MS).catch(() => null);
+      const ct = up ? up.headers.get('content-type') || '' : '';
+      if (up && up.ok && ct.startsWith('image/')) {
+        const buf = await up.arrayBuffer().catch(() => null);
+        if (buf && buf.byteLength > 0 && buf.byteLength <= 8 * 1024 * 1024) {
+          return new Response(buf, {
+            status: 200,
+            headers: {
+              'Content-Type': ct,
+              ...corsHeaders({ 'Cache-Control': 'no-store', 'X-CCTV-Source': 'upstream-image' }),
+            },
+          });
+        }
+      }
+    }
+    const label = url.searchParams.get('label') || source.name || cameraId;
+    const city = url.searchParams.get('city') || source.city || '';
+    const svg = cctvSyntheticSvg({
+      cameraId,
+      label,
+      city,
+      status: source.url ? 'LIVE HLS — PLAYING VIA MEDIA' : 'NO UPSTREAM CONFIGURED',
+    });
+    return new Response(svg, {
+      status: 200,
+      headers: {
+        'Content-Type': 'image/svg+xml',
+        ...corsHeaders({ 'Cache-Control': 'no-store', 'X-CCTV-Source': 'synthetic' }),
+      },
+    });
+  }
+
+  return err(404, `unknown cctv route: ${path}`);
+}
+
+// ---------------------------------------------------------------------------
 // Router
 // ---------------------------------------------------------------------------
 
@@ -384,19 +638,10 @@ export default {
         });
       }
 
-      // --- CCTV catalog (from CCTV_SOURCES_JSON env) -----------------------
+      // --- CCTV (sources / health / stream / media / frame) ------------------
       if (path === '/api/cctv' || path.startsWith('/api/cctv/')) {
         if (request.method !== 'GET') return err(405, 'Method Not Allowed');
-        const raw = (env.CCTV_SOURCES_JSON || '').trim();
-        if (!raw) return err(503, 'CCTV_SOURCES_JSON is not set', { sources: [] });
-        let sources;
-        try {
-          sources = JSON.parse(raw);
-        } catch {
-          return err(500, 'CCTV_SOURCES_JSON is not valid JSON', { sources: [] });
-        }
-        const list = Array.isArray(sources) ? sources : sources.sources || [];
-        return ok({ sources: list });
+        return handleCctv(request, url, env);
       }
 
       // --- AIS live (stateless snapshot; no socket in a Worker) ------------
