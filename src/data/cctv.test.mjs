@@ -60,6 +60,7 @@ import cctvLayer, {
   refreshCoverageStyles,
   setCctvCardPresentationOptions,
   setActiveCamera,
+  shouldRetryCctvWorker,
 } from './cctv.js';
 import {
   CCTV_ACTIVATION_RESULT,
@@ -1282,4 +1283,16 @@ test('frameSignatureFromPixels: empty or junk input yields null (always redraw)'
   assert.equal(frameSignatureFromPixels(null), null);
   assert.equal(frameSignatureFromPixels(undefined), null);
   assert.equal(frameSignatureFromPixels({}), null);
+});
+
+test('shouldRetryCctvWorker: static-host misses and transient upstream failures retry once', () => {
+  for (const status of [404, 405, 501, 502, 503, 504]) {
+    assert.equal(shouldRetryCctvWorker(status), true, `status ${status} should retry`);
+  }
+});
+
+test('shouldRetryCctvWorker: everything else surfaces as-is', () => {
+  for (const status of [200, 400, 401, 403, 500, 0, NaN]) {
+    assert.equal(shouldRetryCctvWorker(status), false, `status ${status} must not retry`);
+  }
 });

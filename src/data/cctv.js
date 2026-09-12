@@ -128,13 +128,25 @@ function cctvUrl(path) {
   return base ? `${base}${path}` : path;
 }
 
+/**
+ * Whether a same-origin CCTV API failure is worth one worker retry.
+ * Static-host misses (404/405/501, no /api route) plus transient upstream
+ * failures (502/503/504, degraded worker) — everything else surfaces as-is.
+ * @param {number} status - HTTP response status.
+ * @returns {boolean} True when the worker fallback should be tried once.
+ */
+export function shouldRetryCctvWorker(status) {
+  return status === 404 || status === 405 || status === 501
+    || status === 502 || status === 503 || status === 504;
+}
+
 async function cctvFetchJson(path) {
   const primary = cctvUrl(path);
   try {
     const resp = await fetch(primary, { cache: 'no-store' });
     if (resp.ok) return resp;
-    // Same-origin 404 on static hosts → retry worker once.
-    if (!cctvApiBase() && (resp.status === 404 || resp.status === 405 || resp.status === 501)) {
+    // Same-origin miss or transient upstream failure → retry worker once.
+    if (!cctvApiBase() && shouldRetryCctvWorker(resp.status)) {
       const fallback = await fetch(`${CCTV_WORKER_BASE}${path}`, { cache: 'no-store' });
       if (fallback.ok) return fallback;
     }
@@ -355,6 +367,7 @@ let _count = 0;
 let _lastUpdate = null;
 let _lastHealthSyncAt = 0;
 let _lastError = null;
+let _sourcesLive = true; // False when the catalog fell back to seeds (backend sources failed).
 let _healthById = new Map();
 let _calibrationById = new Map();
 let _listeners = new Set();
@@ -3585,6 +3598,7 @@ function uiState() {
     count: _count,
     lastUpdate: _lastUpdate,
     error: _lastError,
+    sourcesLive: _sourcesLive,
     loading: {
       active: _geoLoading,
       loaded: Math.min(_geoLoadDone, _geoLoadTotal),
@@ -4107,6 +4121,7 @@ function clearRuntimeState() {
   _lastUpdate = null;
   _lastHealthSyncAt = 0;
   _lastError = null;
+  _sourcesLive = true;
   _lastFocusStyleAt = 0;
   _activeFocusStyleCount = 0;
   // FIX ①/③: the discovered tileset handle is scene-scoped — drop it so a fresh
@@ -4317,6 +4332,7 @@ const cctvLayer = {
     registerSpriteCollection('cctv', _billboards);
 
     const sources = await loadCameraSources();
+    _sourcesLive = sources.length > 0;
     const catalogFromSources = buildCatalogFromSources(sources);
     const catalog = catalogFromSources.length ? catalogFromSources : seedCatalog();
 

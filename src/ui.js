@@ -6631,9 +6631,10 @@ export class StyleManager {
         const projLabel = state?.showProjection !== false ? 'MONITOR' : 'OFF';
         this._cctvMeta.textContent = `${activeCamera.city} · HDG ${Math.round(activeCamera.headingDeg)}° · FOV ${Math.round(activeCamera.fovDeg)}° · RANGE ${Math.round(activeCamera.rangeM)}m · ${projLabel}${calBadge ? ` · ${calBadge}` : ''} · ${provider}${statusMsg}`;
       } else if (cameras.length > 0) {
+        const liveNote = state.sourcesLive === false ? ' · live feeds unavailable — curated cameras' : '';
         this._cctvMeta.textContent = enabled
-          ? `${cameras.length} cameras loaded · click a camera to activate`
-          : `${cameras.length} cameras loaded · enable CCTV to activate`;
+          ? `${cameras.length} cameras loaded · click a camera to activate${liveNote}`
+          : `${cameras.length} cameras loaded · enable CCTV to activate${liveNote}`;
       } else {
         this._cctvMeta.textContent = 'Enable CCTV to load camera intersections';
       }
