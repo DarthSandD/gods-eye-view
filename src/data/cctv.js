@@ -101,12 +101,53 @@ import {
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
 
 // ---------------------------------------------------------------------------
-// API endpoints
+// API endpoints — same-origin first, Cloudflare worker fallback for static
+// hosts without /api (GitHub Pages). omnieyes.pages.dev proxies /api
+// same-origin; github.io must use the worker absolute URL.
 // ---------------------------------------------------------------------------
 const FRAME_ENDPOINT = '/api/cctv/frame';
 const SOURCE_ENDPOINT = '/api/cctv/sources';
 const HEALTH_ENDPOINT = '/api/cctv/health';
 const MEDIA_ENDPOINT = '/api/cctv/media';
+const CCTV_WORKER_BASE = 'https://gev-api.darthsandd.workers.dev';
+
+function cctvApiBase() {
+  try {
+    const override = globalThis.window?.__GEV_API_BASE__;
+    if (typeof override === 'string' && override.trim()) return override.trim().replace(/\/+$/, '');
+  } catch { /* no window */ }
+  try {
+    const host = String(globalThis.location?.hostname || globalThis.window?.location?.hostname || '');
+    if (host.endsWith('github.io')) return CCTV_WORKER_BASE;
+  } catch { /* no location */ }
+  return '';
+}
+
+function cctvUrl(path) {
+  const base = cctvApiBase();
+  return base ? `${base}${path}` : path;
+}
+
+async function cctvFetchJson(path) {
+  const primary = cctvUrl(path);
+  try {
+    const resp = await fetch(primary, { cache: 'no-store' });
+    if (resp.ok) return resp;
+    // Same-origin 404 on static hosts → retry worker once.
+    if (!cctvApiBase() && (resp.status === 404 || resp.status === 405 || resp.status === 501)) {
+      const fallback = await fetch(`${CCTV_WORKER_BASE}${path}`, { cache: 'no-store' });
+      if (fallback.ok) return fallback;
+    }
+    return resp;
+  } catch (err) {
+    if (!cctvApiBase()) {
+      try {
+        return await fetch(`${CCTV_WORKER_BASE}${path}`, { cache: 'no-store' });
+      } catch { /* fall through */ }
+    }
+    throw err;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Timing and geometry constants
@@ -1123,7 +1164,7 @@ function cityIdByName(cityName) {
  */
 async function loadCameraSources() {
   try {
-    const resp = await fetch(SOURCE_ENDPOINT, { cache: 'no-store' });
+    const resp = await cctvFetchJson(SOURCE_ENDPOINT);
     if (!resp.ok) return [];
     const data = await resp.json();
     if (!Array.isArray(data?.sources)) return [];
@@ -1522,7 +1563,7 @@ function frameUrlFor(camera, refreshMs = ACTIVE_FRAME_REFRESH_MS) {
     pitch: String(Math.round(camera.pitchDeg || -10)),
     ts: String(tick),
   });
-  return `${FRAME_ENDPOINT}/${encodeURIComponent(camera.id)}?${params.toString()}`;
+  return `${cctvUrl(FRAME_ENDPOINT)}/${encodeURIComponent(camera.id)}?${params.toString()}`;
 }
 
 /**
@@ -1531,7 +1572,7 @@ function frameUrlFor(camera, refreshMs = ACTIVE_FRAME_REFRESH_MS) {
  * @returns {string} Media URL.
  */
 function mediaUrlFor(camera) {
-  return `${MEDIA_ENDPOINT}/${encodeURIComponent(camera.id)}?ts=${Math.floor(Date.now() / 15000)}`;
+  return `${cctvUrl(MEDIA_ENDPOINT)}/${encodeURIComponent(camera.id)}?ts=${Math.floor(Date.now() / 15000)}`;
 }
 
 /**
@@ -4217,7 +4258,7 @@ async function syncHealthState(force = false) {
   _lastHealthSyncAt = now;
 
   try {
-    const resp = await fetch(HEALTH_ENDPOINT, { cache: 'no-store' });
+    const resp = await cctvFetchJson(HEALTH_ENDPOINT);
     if (!resp.ok) return;
     const data = await resp.json();
     const rows = Array.isArray(data?.cameras) ? data.cameras : [];
