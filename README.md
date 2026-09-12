@@ -380,7 +380,7 @@ See [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md) for the authoritative runti
 | Semarang — Lawang Sewu / Tugumuda (exact GPS) | PantauSemar HLS | live |
 | Bandung Gedung Sate, Surabaya ×2 | city portals | data card + WATCH LIVE link |
 
-Playback is HLS via self-hosted `vendor/hls.min.js`; the worker rewrites playlists and proxies segments so CORS is solved server-side. Camera catalog lives in `config/cctv_sources.indonesia.json` and ships to the worker as the `CCTV_SOURCES_JSON` secret.
+Playback is HLS via self-hosted `vendor/hls.min.js`; the worker rewrites playlists and proxies segments so CORS is solved server-side. Camera catalog lives in `config/cctv_sources.indonesia.json` and ships to the worker as the `CCTV_SOURCES_JSON` secret. GitHub Pages has no same-origin `/api`, so the app uses the worker absolute URL there automatically (Cloudflare Pages proxies `/api` same-origin).
 
 ---
 
